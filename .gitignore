@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+database/burn_test.db-*
+uploads/*.jpg
+uploads/*.jpeg
+uploads/*.png
+uploads/*.webp
+uploads/*.gif
