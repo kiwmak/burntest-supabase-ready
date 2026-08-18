@@ -266,13 +266,20 @@
   .stamp.fail{ color: var(--fail); border-color: var(--fail); background: var(--fail-bg); }
   .stamp.pending{ color: var(--pending); border-color: var(--pending); background: var(--pending-bg); transform:none; }
 
-  .table-wrap{ max-height: 560px; overflow-y:auto; }
+  .table-wrap{ overflow-x:auto; }
 
   .list-foot{
     padding: 10px 20px; display:flex; justify-content:space-between; align-items:center;
     border-top:1px solid var(--line); background: var(--paper-2);
     font-size:12px; color: var(--ink-soft);
   }
+  .pagination{ display:flex; align-items:center; gap:10px; }
+  .pagination .icon-btn{ width:26px; height:26px; font-size:14px; }
+  .pagination .icon-btn:disabled{
+    opacity:0.35; cursor:not-allowed; border-color:var(--line); color:var(--ink-soft); background:white;
+  }
+  .pagination .icon-btn:disabled:hover{ border-color:var(--line); background:white; color:var(--ink-soft); }
+  #pageLabel{ font-family:'IBM Plex Mono', monospace; font-size:12px; min-width:70px; text-align:center; }
 
   /* ---- Edit mode ---- */
   .card.editing{ box-shadow: 0 0 0 2px var(--copper); }
@@ -386,48 +393,6 @@
   }
   .lightbox.show{ display:flex; }
   .lightbox img{ max-width:100%; max-height:100%; border-radius: var(--radius); }
-
-  /* Camera Burn Test */
-  .camera-modal .modal{ width:min(980px, calc(100vw - 24px)); max-height:94vh; overflow:auto; }
-  .camera-wrap{padding:14px 18px 18px;}
-  .camera-stage{position:relative; width:100%; background:#111; border-radius:4px; overflow:hidden; min-height:300px; display:flex; align-items:center; justify-content:center;}
-  .camera-stage video{display:block; width:100%; height:auto; max-height:70vh; object-fit:contain; background:#111;}
-  .camera-overlay{
-    position:absolute !important;
-    z-index:50 !important;
-    display:block !important;
-    visibility:visible !important;
-    opacity:1 !important;
-    left:16px;
-    bottom:16px;
-    width:min(310px, 48%);
-    min-height:120px;
-    background:rgba(18,18,18,.90);
-    color:#fff;
-    border-left:4px solid #c06a2d;
-    padding:11px 14px;
-    box-sizing:border-box;
-    font-family:Arial,sans-serif;
-    pointer-events:none;
-    box-shadow:0 4px 18px rgba(0,0,0,.45);
-    text-shadow:0 1px 1px rgba(0,0,0,.5);
-}
-  .camera-overlay .ov-title{font-size:14px;font-weight:700;margin-bottom:8px;}
-  .camera-overlay .ov-row{display:flex;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,.12);font-size:12px;line-height:1.25;}
-  .camera-overlay .ov-row:first-of-type{border-top:0;}
-  .camera-overlay .ov-label{width:92px;flex:0 0 92px;color:rgba(255,255,255,.58);text-transform:uppercase;}
-  .camera-overlay .ov-value{flex:1;text-align:right;font-weight:700;word-break:break-word;}
-  .camera-controls{display:flex;gap:9px;align-items:center;justify-content:center;flex-wrap:wrap;padding-top:14px;}
-  .camera-controls select{width:auto;min-width:120px;}
-  .camera-status{text-align:center;font-size:12px;color:var(--ink-soft);min-height:18px;margin-top:8px;}
-  @media(max-width:600px){
-    .camera-overlay{left:8px;bottom:8px;width:calc(100% - 16px);padding:8px 10px;}
-    .camera-overlay .ov-row{padding:3px 0;font-size:10px;}
-    .camera-overlay .ov-label{width:72px;flex-basis:72px;}
-    .camera-overlay .ov-title{font-size:12px;margin-bottom:4px;}
-    .camera-stage{min-height:220px;}
-  }
-
 </style>
 </head>
 <body>
@@ -442,6 +407,7 @@
   </div>
   <div class="header-stats">
     <div class="stat"><b id="statTotal">–</b><small>Tổng test</small></div>
+    <div class="stat"><b id="statPending" style="color:#E0A546">–</b><small>Pending</small></div>
     <div class="stat"><b id="statPass" style="color:#7FBB93">–</b><small>Pass</small></div>
     <div class="stat"><b id="statFail" style="color:#E39C90">–</b><small>Fail</small></div>
   </div>
@@ -503,7 +469,7 @@
           <legend>Thông số test đốt</legend>
           <div class="field">
             <label for="temperature">Nhiệt độ (°C)</label>
-            <input type="number" step="0.1" id="temperature" placeholder="20">
+            <input type="number" step="1" id="temperature" placeholder="20">
           </div>
           <div class="field-row">
             <div class="field">
@@ -539,7 +505,7 @@
           <legend>Kết quả</legend>
           <div class="result-toggle">
             <input type="radio" name="test_result" id="res_pending" value="" checked>
-            <label for="res_pending" class="pending">⏳ CHỜ</label>
+            <label for="res_pending" class="pending">⏳ PENDING</label>
             <input type="radio" name="test_result" id="res_pass" value="PASS">
             <label for="res_pass" class="pass">✓ PASS</label>
             <input type="radio" name="test_result" id="res_fail" value="FAIL">
@@ -597,7 +563,8 @@
         <select id="filterPo"><option value="">Tất cả PO</option></select>
         <select id="filterResult">
           <option value="">Tất cả kết quả</option>
-          <option value="PASS">PASS</option>
+          <option value="PENDING">PENDING</option>
+           <option value="PASS">PASS</option>
           <option value="FAIL">FAIL</option>
         </select>
         <input type="text" id="filterProduct" placeholder="Tìm mã sản phẩm...">
@@ -618,12 +585,17 @@
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr><td colspan="9" class="empty-state">Đang tải dữ liệu…</td></tr>
+            <tr><td colspan="15" class="empty-state">Đang tải dữ liệu…</td></tr>
           </tbody>
         </table>
       </div>
       <div class="list-foot">
         <span id="countLabel">0 bản ghi</span>
+        <div class="pagination" id="paginationControls">
+          <button type="button" class="icon-btn" id="prevPageBtn" title="Trang trước">‹</button>
+          <span id="pageLabel">1 / 1</span>
+          <button type="button" class="icon-btn" id="nextPageBtn" title="Trang sau">›</button>
+        </div>
         <span>Cập nhật lúc <span id="lastUpdated">–</span></span>
       </div>
     </div>
@@ -696,54 +668,9 @@ CBE	YN26-0151	22488P	70	80	123	WHITE	T27"></textarea>
           <span>Kết quả: <span id="modalResult"></span></span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button type="button" class="btn btn-ghost" style="width:auto;padding:7px 12px;font-size:12px;margin:0;" onclick="openCameraModal()">📷 Chụp ảnh</button>
-        <button class="modal-close" onclick="closeImageModal()">✕</button>
-      </div>
+      <button class="modal-close" onclick="closeImageModal()">✕</button>
     </div>
     <div class="pic-grid" id="picGrid"></div>
-  </div>
-</div>
-
-
-<!-- Camera chụp ảnh có đóng dấu thông tin sản phẩm -->
-<div class="modal-overlay camera-modal" id="cameraModal">
-  <div class="modal">
-    <div class="modal-head">
-      <div>
-        <h2>📷 Chụp ảnh Burn Test</h2>
-        <div class="modal-meta"><span>Ảnh chụp sẽ được đóng dấu thông tin sản phẩm trực tiếp lên ảnh.</span></div>
-      </div>
-      <button class="modal-close" type="button" onclick="closeCameraModal()">✕</button>
-    </div>
-    <div class="camera-wrap">
-      <div class="camera-stage">
-        <video id="cameraVideo" autoplay playsinline webkit-playsinline muted></video>
-        <div class="camera-overlay" id="cameraOverlay">
-          <div class="ov-title">Thông tin sản phẩm</div>
-          <div class="ov-row"><span class="ov-label">ĐƠN HÀNG</span><span class="ov-value" id="ovPo">—</span></div>
-          <div class="ov-row"><span class="ov-label">MÃ HÀNG</span><span class="ov-value" id="ovProduct">—</span></div>
-          <div class="ov-row"><span class="ov-label">MÀU SẮC</span><span class="ov-value" id="ovColor">—</span></div>
-          <div class="ov-row"><span class="ov-label">LOẠI BẤC</span><span class="ov-value" id="ovWick">—</span></div>
-          <div class="ov-row"><span class="ov-label">KÍCH THƯỚC</span><span class="ov-value" id="ovSize">—</span></div>
-          <div class="ov-row"><span class="ov-label">TRỌNG LƯỢNG</span><span class="ov-value" id="ovWeight">—</span></div>
-        </div>
-      </div>
-      <div class="camera-controls">
-        <label style="font-size:12px;">Lưu vào:
-          <select id="cameraSlot">
-            <option value="PIC_1">Ảnh 1</option>
-            <option value="PIC_2">Ảnh 2</option>
-            <option value="PIC_3">Ảnh 3</option>
-            <option value="PIC_4">Ảnh 4</option>
-            <option value="PIC_5">Ảnh 5</option>
-          </select>
-        </label>
-        <button type="button" class="btn" id="captureBtn" onclick="captureCameraPhoto()">● Chụp ảnh</button>
-        <button type="button" class="btn btn-ghost" onclick="closeCameraModal()">Hủy</button>
-      </div>
-      <div class="camera-status" id="cameraStatus">Đang khởi động camera…</div>
-    </div>
   </div>
 </div>
 
@@ -759,9 +686,6 @@ let clientsCache = [];
 let posCache = [];
 let currentEditId = null;
 let rowsCache = {};
-let cameraStream = null;
-let cameraTestId = null;
-let cameraTestRow = null;
 
 // ---------- Helpers ----------
 function showMsg(el, text, isErr){
@@ -776,7 +700,7 @@ function formatDateTime(value){
 function stampHtml(result){
   if(result === 'PASS') return '<span class="stamp pass">PASS</span>';
   if(result === 'FAIL') return '<span class="stamp fail">FAIL</span>';
-  return '<span class="stamp pending">CHỜ</span>';
+  return '<span class="stamp pending">PENDING</span>';
 }
 function todayISO(){
   return new Date().toISOString().slice(0,10);
@@ -823,7 +747,11 @@ async function loadClientsAndPos(){
 }
 
 // ---------- Load PO_Detail table ----------
-async function loadTable(){
+const PAGE_SIZE = 10;
+let currentPage = 1;
+let lastLoadedRows = [];
+
+async function loadTable(resetPage = true){
   const po_id = document.getElementById('filterPo').value;
   const test_result = document.getElementById('filterResult').value;
   const product_code = document.getElementById('filterProduct').value;
@@ -834,14 +762,35 @@ async function loadTable(){
   if(product_code) params.set('product_code', product_code);
 
   const rows = await fetch(`${API}/po-details?${params}`).then(r => r.json());
-  const poMap = Object.fromEntries(posCache.map(p => [p.PO_Id, p.PO_Name]));
+  lastLoadedRows = rows;
   rowsCache = Object.fromEntries(rows.map(r => [r.Id, r]));
+
+  if(resetPage) currentPage = 1; // filter/refresh mới -> quay về trang đầu; sửa/xóa/upload -> giữ nguyên trang
+  renderPage();
+
+  // Stats (không phụ thuộc filter)
+  const summary = await fetch(`${API}/po-details/summary`).then(r => r.json());
+  document.getElementById('statTotal').textContent = summary.total ?? 0;
+  document.getElementById('statPending').textContent = summary.pending_count ?? 0;
+  document.getElementById('statPass').textContent = summary.pass_count ?? 0;
+  document.getElementById('statFail').textContent = summary.fail_count ?? 0;
+}
+
+function renderPage(){
+  const rows = lastLoadedRows;
+  const poMap = Object.fromEntries(posCache.map(p => [p.PO_Id, p.PO_Name]));
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  if(currentPage > totalPages) currentPage = totalPages;
+  if(currentPage < 1) currentPage = 1;
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageRows = rows.slice(start, start + PAGE_SIZE);
 
   const tbody = document.getElementById('tableBody');
   if(!rows.length){
     tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Chưa có bản ghi test nào</td></tr>';
   } else {
-    tbody.innerHTML = rows.map(r => `
+    tbody.innerHTML = pageRows.map(r => `
       <tr id="row-${r.Id}" class="${Number(currentEditId) === r.Id ? 'editing-row' : ''}">
         <td class="mono"><a href="#" class="product-link" onclick="openImageModal(${r.Id}); return false;">${r.Product_Code}</a></td>
         <td>${poMap[r.PO_Id] || r.PO_Id}</td>
@@ -863,13 +812,18 @@ async function loadTable(){
 
   document.getElementById('countLabel').textContent = `${rows.length} bản ghi`;
   document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString('vi-VN');
-
-  // Stats (không phụ thuộc filter)
-  const summary = await fetch(`${API}/po-details/summary`).then(r => r.json());
-  document.getElementById('statTotal').textContent = summary.total ?? 0;
-  document.getElementById('statPass').textContent = summary.pass_count ?? 0;
-  document.getElementById('statFail').textContent = summary.fail_count ?? 0;
+  document.getElementById('pageLabel').textContent = `${currentPage} / ${totalPages}`;
+  document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+  document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
 }
+
+document.getElementById('prevPageBtn').addEventListener('click', () => {
+  if(currentPage > 1){ currentPage--; renderPage(); }
+});
+document.getElementById('nextPageBtn').addEventListener('click', () => {
+  const totalPages = Math.max(1, Math.ceil(lastLoadedRows.length / PAGE_SIZE));
+  if(currentPage < totalPages){ currentPage++; renderPage(); }
+});
 
 function renderPics(r){
   const filled = [1,2,3,4,5].filter(i => r['PIC_' + i]).length;
@@ -890,20 +844,18 @@ async function uploadImage(id, input){
   fd.append('pic_slot', match[1]);
   fd.append('file', file);
   const res = await fetch(`${API}/po-details/${id}/images`, { method:'POST', body: fd });
-  if(res.ok){ loadTable(); } else { alert('Lỗi upload ảnh'); }
+  if(res.ok){ loadTable(false); } else { alert('Lỗi upload ảnh'); }
 }
 
 // ---------- Modal xem 5 ảnh test đốt ----------
 const PIC_SLOTS = ['PIC_1', 'PIC_2', 'PIC_3', 'PIC_4', 'PIC_5'];
 
 async function openImageModal(id){
-  cameraTestId = id;
   let r = rowsCache[id];
   if(!r){
     r = await fetch(`${API}/po-details/${id}`).then(res => res.json());
   }
   if(r.error){ alert('Không tải được dữ liệu bản ghi'); return; }
-  cameraTestRow = r;
 
   document.getElementById('modalProductCode').textContent = r.Product_Code;
   document.getElementById('modalPo').textContent = (posCache.find(p => p.PO_Id === r.PO_Id) || {}).PO_Name || r.PO_Id;
@@ -943,7 +895,6 @@ async function openImageModal(id){
 
 function closeImageModal(){
   document.getElementById('imageModal').classList.remove('show');
-  if(document.getElementById('cameraModal').classList.contains('show')) closeCameraModal();
 }
 
 // ---------- Kéo-thả ảnh vào từng ô PIC ----------
@@ -1006,343 +957,11 @@ async function uploadImageToSlot(id, slot, file, frameEl){
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Lỗi upload ảnh');
     }
-    await loadTable();
+    await loadTable(false);
     openImageModal(id); // refresh modal với ảnh mới
   } catch(err){
     alert('✕ ' + err.message);
     if(frame) frame.classList.remove('uploading');
-  }
-}
-
-
-// ---------- Camera: chụp ảnh + đóng dấu thông tin sản phẩm ----------
-function cameraPoName(r){
-  const po = posCache.find(p => String(p.PO_Id) === String(r.PO_Id));
-  return po?.PO_Name || r.PO_Name || r.po_name || r.PO_Id || '—';
-}
-
-function updateCameraOverlay(r){
-  r = r || {};
-
-  const po = cameraPoName(r);
-  const product = r.Product_Code ?? r.product_code ?? r.ProductCode ?? '—';
-  const color = r.Color ?? r.color ?? r.Mau ?? r.mau ?? '—';
-  const wick = r.Wick ?? r.wick ?? r.Wick_Type ?? r.wick_type ?? '—';
-  const d = r.Diameter ?? r.diameter ?? r.diameter_mm ?? r.Diameter_mm;
-  const h = r.Height ?? r.height ?? r.height_mm ?? r.Height_mm;
-  const weight = r.Weight ?? r.weight ?? r.Weight_g ?? r.weight_g;
-
-  const set = (id, value) => {
-    const el = document.getElementById(id);
-    if(el) el.textContent = (value === null || value === undefined || value === '') ? '—' : String(value);
-  };
-
-  set('ovPo', po);
-  set('ovProduct', product);
-  set('ovColor', color);
-  set('ovWick', wick);
-  set('ovSize', (d != null || h != null) ? `${d ?? '—'} × ${h ?? '—'}` : '—');
-  set('ovWeight', weight != null && weight !== '' ? `${weight} g` : '—');
-}
-
-async function openCameraModal(){
-  const r = cameraTestRow || rowsCache[cameraTestId];
-
-  if(!r){
-    alert('Chưa chọn bản ghi Burn Test.');
-    return;
-  }
-
-  const modal = document.getElementById('cameraModal');
-  const status = document.getElementById('cameraStatus');
-  const video = document.getElementById('cameraVideo');
-
-  cameraTestRow = r;
-  modal.classList.add('show');
-
-  const overlay = document.getElementById('cameraOverlay');
-  if(overlay){
-    overlay.style.display = 'block';
-    overlay.style.visibility = 'visible';
-    overlay.style.opacity = '1';
-    overlay.style.zIndex = '50';
-  }
-  updateCameraOverlay(r);
-
-  // Camera trên điện thoại chỉ hoạt động trong secure context.
-  const isLocal =
-    location.hostname === 'localhost' ||
-    location.hostname === '127.0.0.1' ||
-    location.hostname === '[::1]';
-
-  if(!window.isSecureContext && !isLocal){
-    const msg = 'Camera trên điện thoại yêu cầu HTTPS. Hãy mở đúng địa chỉ https:// của Koyeb (không dùng http://).';
-    status.textContent = '✕ ' + msg;
-    alert(msg);
-    return;
-  }
-
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    const msg = 'Trình duyệt hiện tại không hỗ trợ Camera API. Hãy mở bằng Chrome/Safari mới nhất và không mở trang trong trình duyệt tích hợp của Zalo/Facebook.';
-    status.textContent = '✕ ' + msg;
-    alert(msg);
-    return;
-  }
-
-  status.textContent = 'Đang xin quyền sử dụng camera…';
-
-  // Dọn stream cũ trước khi mở lại.
-  stopCamera();
-
-  try{
-    // Ưu tiên camera sau nhưng dùng cấu hình đơn giản để tương thích
-    // Android Chrome / iPhone Safari.
-    let stream;
-
-    try{
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' }
-        }
-      });
-    }catch(firstErr){
-      console.warn('Camera environment không mở được, thử cấu hình video tối giản:', firstErr);
-
-      // Fallback cho một số điện thoại/browser không xử lý facingMode.
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: true
-      });
-    }
-
-    cameraStream = stream;
-    video.srcObject = stream;
-
-    // playsinline + muted đã có trong HTML; gọi play sau khi gán stream.
-    try{
-      await video.play();
-    }catch(playErr){
-      console.warn('video.play() bị chặn:', playErr);
-    }
-
-    updateCameraOverlay(cameraTestRow || r);
-
-    if(overlay){
-      overlay.style.display = 'block';
-      overlay.style.visibility = 'visible';
-      overlay.style.opacity = '1';
-      overlay.style.zIndex = '50';
-    }
-
-    status.textContent = '✓ Camera đã mở. Thông tin sản phẩm đang hiển thị.';
-  }catch(err){
-    console.error('getUserMedia error:', err);
-
-    let msg = 'Không thể mở camera.';
-
-    switch(err.name){
-      case 'NotAllowedError':
-        msg = 'Camera bị từ chối quyền. Hãy vào Cài đặt trình duyệt → Quyền → Camera → Cho phép trang này.';
-        break;
-      case 'NotFoundError':
-        msg = 'Không tìm thấy camera trên thiết bị.';
-        break;
-      case 'NotReadableError':
-        msg = 'Camera đang được ứng dụng khác sử dụng. Hãy đóng Camera/Zalo/Teams/ứng dụng khác rồi thử lại.';
-        break;
-      case 'OverconstrainedError':
-        msg = 'Thiết bị không đáp ứng cấu hình camera. Hãy thử lại.';
-        break;
-      case 'SecurityError':
-        msg = 'Trình duyệt chặn camera vì lý do bảo mật. Hãy mở bằng HTTPS.';
-        break;
-      default:
-        msg = `${msg} ${err.message || err.name || ''}`.trim();
-    }
-
-    status.textContent = '✕ ' + msg;
-    alert(msg);
-  }
-}
-
-function stopCamera(){
-  if(cameraStream){
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
-  const video = document.getElementById('cameraVideo');
-  if(video) video.srcObject = null;
-}
-
-function closeCameraModal(){
-  stopCamera();
-  document.getElementById('cameraModal').classList.remove('show');
-}
-
-function drawCameraOverlay(ctx, canvas, r){
-  r = r || {};
-
-  // Kích thước theo ảnh thật, không phụ thuộc kích thước video trên màn hình.
-  const s = Math.max(1, canvas.width / 1280);
-  const margin = Math.round(24 * s);
-  const boxW = Math.min(Math.round(430 * s), Math.round(canvas.width * 0.50));
-  const rowH = Math.round(43 * s);
-  const titleH = Math.round(50 * s);
-  const boxH = titleH + rowH * 6 + Math.round(18 * s);
-  const x = margin;
-  const y = Math.max(margin, canvas.height - margin - boxH);
-
-  const po = cameraPoName(r);
-  const product = r.Product_Code ?? r.product_code ?? r.ProductCode ?? '—';
-  const color = r.Color ?? r.color ?? r.Mau ?? r.mau ?? '—';
-  const wick = r.Wick ?? r.wick ?? r.Wick_Type ?? r.wick_type ?? '—';
-  const d = r.Diameter ?? r.diameter ?? r.diameter_mm ?? r.Diameter_mm;
-  const h = r.Height ?? r.height ?? r.height_mm ?? r.Height_mm;
-  const weight = r.Weight ?? r.weight ?? r.Weight_g ?? r.weight_g;
-
-  const rows = [
-    ['ĐƠN HÀNG', po],
-    ['MÃ HÀNG', product],
-    ['MÀU SẮC', color],
-    ['LOẠI BẤC', wick],
-    ['KÍCH THƯỚC', `${d ?? '—'} × ${h ?? '—'}`],
-    ['TRỌNG LƯỢNG', weight != null && weight !== '' ? `${weight} g` : '—']
-  ];
-
-  ctx.save();
-
-  // Nền tối để chữ luôn đọc được trên ảnh.
-  ctx.fillStyle = 'rgba(18,18,18,0.88)';
-  ctx.fillRect(x, y, boxW, boxH);
-
-  // Thanh màu bên trái.
-  ctx.fillStyle = '#c06a2d';
-  ctx.fillRect(x, y, Math.max(4, Math.round(5*s)), boxH);
-
-  ctx.textBaseline = 'alphabetic';
-  ctx.textAlign = 'left';
-
-  const family = 'Arial, sans-serif';
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `700 ${Math.round(21*s)}px ${family}`;
-  ctx.fillText('Thông tin sản phẩm', x + Math.round(18*s), y + Math.round(31*s));
-
-  rows.forEach((item, i) => {
-    const yy = y + titleH + i * rowH;
-
-    if(i > 0){
-      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-      ctx.lineWidth = Math.max(1, s);
-      ctx.beginPath();
-      ctx.moveTo(x + Math.round(12*s), yy);
-      ctx.lineTo(x + boxW - Math.round(12*s), yy);
-      ctx.stroke();
-    }
-
-    ctx.font = `400 ${Math.round(15*s)}px ${family}`;
-    ctx.fillStyle = 'rgba(255,255,255,0.60)';
-    ctx.textAlign = 'left';
-    ctx.fillText(item[0], x + Math.round(18*s), yy + Math.round(28*s));
-
-    let value = String(item[1] ?? '—');
-    ctx.font = `700 ${Math.round(15*s)}px ${family}`;
-
-    const maxW = boxW - Math.round(155*s);
-    while(value.length > 3 && ctx.measureText(value).width > maxW){
-      value = value.slice(0, -2) + '…';
-    }
-
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'right';
-    ctx.fillText(value, x + boxW - Math.round(18*s), yy + Math.round(28*s));
-  });
-
-  ctx.restore();
-}
-
-async function captureCameraPhoto(){
-  const video = document.getElementById('cameraVideo');
-  const btn = document.getElementById('captureBtn');
-  const status = document.getElementById('cameraStatus');
-  const r = cameraTestRow || rowsCache[cameraTestId];
-
-  if(!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight || !cameraStream || !r){
-    alert('Camera chưa sẵn sàng hoặc chưa có thông tin sản phẩm.');
-    return;
-  }
-
-  btn.disabled = true;
-  status.textContent = 'Đang chụp ảnh và đóng dấu thông tin sản phẩm…';
-
-  try{
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const ctx = canvas.getContext('2d', {alpha:false});
-    if(!ctx) throw new Error('Trình duyệt không hỗ trợ Canvas.');
-
-    // 1. Chụp đúng frame camera.
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // 2. Đóng dấu thông tin lên CHÍNH canvas này.
-    drawCameraOverlay(ctx, canvas, r);
-
-    // 3. Xuất canvas thành JPG — overlay đã nằm trong file JPG.
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Không tạo được ảnh JPG.')),
-                   'image/jpeg', 0.92);
-    });
-
-    const slot = document.getElementById('cameraSlot').value;
-    const match = String(slot).match(/([1-5])$/);
-    if(!match) throw new Error('Không xác định được vị trí ảnh.');
-    const slotNumber = match[1];
-
-    const product = r.Product_Code || r.product_code || 'burn-test';
-    const fileName = `${product}_PIC_${slotNumber}_${Date.now()}.jpg`;
-
-    const fd = new FormData();
-    fd.append('pic_slot', slotNumber);
-    fd.append('file', blob, fileName);
-
-    const res = await fetch(`${API}/po-details/${cameraTestId}/images`, {
-      method:'POST',
-      body:fd
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if(!res.ok){
-      throw new Error(data.error || `Lỗi lưu ảnh (HTTP ${res.status})`);
-    }
-
-    status.textContent = `✓ Đã lưu Ảnh ${slotNumber} — ảnh đã có thông tin sản phẩm.`;
-
-    // Cập nhật lại dữ liệu sau khi upload.
-    await loadTable();
-
-    try{
-      const refreshed = await fetch(`${API}/po-details/${cameraTestId}`).then(x => x.json());
-      if(!refreshed.error){
-        cameraTestRow = refreshed;
-        rowsCache[cameraTestId] = refreshed;
-      }
-    }catch(e){
-      console.warn('Không refresh được test:', e);
-    }
-
-    updateCameraOverlay(cameraTestRow || r);
-
-    // Không tự đóng/mở camera để tránh mất overlay và gây khó thao tác.
-    // QC có thể chọn PIC khác và bấm Chụp tiếp.
-  }catch(err){
-    console.error(err);
-    status.textContent = '✕ ' + (err.message || err);
-    alert('Không lưu được ảnh: ' + (err.message || err));
-  }finally{
-    btn.disabled = false;
   }
 }
 
@@ -1358,7 +977,7 @@ document.getElementById('imageModal').addEventListener('click', (e) => {
   if(e.target.id === 'imageModal') closeImageModal();
 });
 document.addEventListener('keydown', (e) => {
-  if(e.key === 'Escape'){ closeLightbox(); closeCameraModal(); closeImageModal(); }
+  if(e.key === 'Escape'){ closeLightbox(); closeImageModal(); }
 });
 
 // Chặn trình duyệt tự mở ảnh nếu người dùng lỡ thả ra ngoài khung ảnh
@@ -1411,7 +1030,7 @@ function enterEditMode(id){
   document.getElementById('formEyebrow').classList.add('editing');
   document.getElementById('submitBtn').textContent = 'Cập nhật kết quả';
   document.getElementById('cancelEditBtn').style.display = 'block';
-  loadTable();
+  loadTable(false);
 }
 
 function exitEditMode(){
@@ -1428,7 +1047,7 @@ function exitEditMode(){
   document.getElementById('end_datetime').value = '';
   document.getElementById('total_burn_time').value = '';
   syncTestDateFromStart();
-  loadTable();
+  loadTable(false);
 }
 
 document.getElementById('cancelEditBtn').addEventListener('click', exitEditMode);
@@ -1439,7 +1058,7 @@ async function deleteRow(id){
   const res = await fetch(`${API}/po-details/${id}`, { method: 'DELETE' });
   if(res.ok || res.status === 204){
     if(currentEditId === id) exitEditMode();
-    loadTable();
+    loadTable(false);
   } else {
     alert('Lỗi khi xóa bản ghi');
   }
