@@ -1198,6 +1198,7 @@ function stampInfoOnCanvas(ctx, w, h){
   const weight = (r.Weight != null && r.Weight !== '') ? `Weight: ${r.Weight}g` : null;
   const colorWick = [r.Color, r.Wick].filter(Boolean).join(' · ') || null;
 
+  const title = 'THÔNG TIN SẢN PHẨM';
   const lines = [
     `PO: ${poName}`,
     `Mã hàng: ${r.Product_Code ?? '—'}`,
@@ -1209,32 +1210,78 @@ function stampInfoOnCanvas(ctx, w, h){
   if(!lines.length) return;
 
   const fontSize = Math.max(18, Math.round(w * 0.024));
+  const titleSize = Math.round(fontSize * 0.82);
   const lineHeight = Math.round(fontSize * 1.5);
   const paddingX = Math.round(fontSize * 0.9);
-  const paddingY = Math.round(fontSize * 0.75);
+  const paddingY = Math.round(fontSize * 0.7);
+  const titleGap = Math.round(fontSize * 0.55); // khoảng cách + đường kẻ dưới tiêu đề
 
-  ctx.font = `600 ${fontSize}px 'Space Grotesk', Arial, sans-serif`;
   ctx.textBaseline = 'top';
 
-  const textWidth = Math.max(...lines.map(l => ctx.measureText(l).width));
-  const boxW = textWidth + paddingX * 2;
-  const boxH = lines.length * lineHeight + paddingY * 2 - (lineHeight - fontSize);
+  // Đo chiều rộng cần thiết (lấy dòng dài nhất giữa tiêu đề và các dòng thông tin)
+  ctx.font = `700 ${titleSize}px 'Space Grotesk', Arial, sans-serif`;
+  let maxWidth = ctx.measureText(title).width;
+  ctx.font = `600 ${fontSize}px 'Space Grotesk', Arial, sans-serif`;
+  lines.forEach(l => { maxWidth = Math.max(maxWidth, ctx.measureText(l).width); });
+
+  const boxW = maxWidth + paddingX * 2;
+  const boxH = titleSize + titleGap * 2 + lines.length * lineHeight + paddingY * 2 - (lineHeight - fontSize);
 
   const margin = fontSize;
   const boxX = margin;
   const boxY = h - boxH - margin;
 
-  ctx.fillStyle = 'rgba(29,27,24,0.74)';
+  // Nền tối mờ + vạch đồng cam bên trái (đồng bộ phong cách thiết kế chung)
+  ctx.fillStyle = 'rgba(29,27,24,0.76)';
   roundRect(ctx, boxX, boxY, boxW, boxH, 8);
   ctx.fill();
-
   ctx.fillStyle = 'rgba(181,98,44,1)';
   ctx.fillRect(boxX, boxY, 5, boxH);
 
+  // Tiêu đề
+  let cursorY = boxY + paddingY;
+  ctx.font = `700 ${titleSize}px 'Space Grotesk', Arial, sans-serif`;
+  ctx.fillStyle = 'rgba(181,98,44,1)';
+  ctx.fillText(title, boxX + paddingX, cursorY);
+  cursorY += titleSize + titleGap;
+
+  // Đường kẻ phân cách dưới tiêu đề
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(boxX + paddingX, cursorY, boxW - paddingX * 2, 1);
+  cursorY += titleGap;
+
+  // Các dòng thông tin
+  ctx.font = `600 ${fontSize}px 'Space Grotesk', Arial, sans-serif`;
   ctx.fillStyle = '#FFFFFF';
-  lines.forEach((line, i) => {
-    ctx.fillText(line, boxX + paddingX, boxY + paddingY + i * lineHeight);
+  lines.forEach((line) => {
+    ctx.fillText(line, boxX + paddingX, cursorY);
+    cursorY += lineHeight;
   });
+}
+
+// Xác định góc xoay thiết bị hiện tại (0/90/180/270), ưu tiên API mới, fallback API cũ
+function getDeviceOrientationAngle(){
+  if(window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number'){
+    return ((window.screen.orientation.angle % 360) + 360) % 360;
+  }
+  if(typeof window.orientation === 'number'){
+    return ((window.orientation % 360) + 360) % 360;
+  }
+  return 0; // không xác định được -> coi như dọc, không xoay thêm
+}
+
+// Quyết định có cần tự xoay khung hình lại hay không: so sánh chiều máy đang cầm (theo góc xoay)
+// với chiều thực tế của khung hình camera trả về (một số trình duyệt/thiết bị Android trả khung
+// theo chiều cảm biến gốc, không tự xoay theo hướng cầm máy).
+function decideCaptureRotation(videoWidth, videoHeight, deviceAngle){
+  const deviceIsPortrait = (deviceAngle === 0 || deviceAngle === 180);
+  const frameIsPortrait = videoHeight >= videoWidth;
+
+  if(deviceIsPortrait === frameIsPortrait){
+    return 0; // khung hình đã đúng chiều, không cần xoay
+  }
+  // Máy đang cầm dọc nhưng khung hình lại ngang (hoặc ngược lại) -> xoay 90° để khớp
+  return deviceAngle === 270 ? -90 : 90;
 }
 
 document.getElementById('captureBtn').addEventListener('click', () => {
@@ -1244,12 +1291,28 @@ document.getElementById('captureBtn').addEventListener('click', () => {
     return;
   }
 
-  // Chụp đúng theo độ phân giải và chiều thực tế của luồng camera (giữ nguyên chiều dọc/ngang lúc chụp)
   const canvas = document.getElementById('captureCanvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const deviceAngle = getDeviceOrientationAngle();
+  const rotateDeg = decideCaptureRotation(video.videoWidth, video.videoHeight, deviceAngle);
+
+  if(rotateDeg === 0){
+    // Trường hợp bình thường (đa số trình duyệt hiện đại): khung hình camera đã đúng chiều
+    // cầm máy sẵn, chỉ cần vẽ thẳng ra canvas theo đúng kích thước gốc.
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  } else {
+    // Khung hình lệch chiều so với cách đang cầm máy -> xoay lại canvas cho đúng
+    canvas.width = video.videoHeight;
+    canvas.height = video.videoWidth;
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(rotateDeg * Math.PI / 180);
+    ctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
+    ctx.restore();
+  }
 
   stampInfoOnCanvas(ctx, canvas.width, canvas.height);
 
