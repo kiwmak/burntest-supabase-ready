@@ -566,7 +566,7 @@
         <fieldset>
           <legend>Kết quả</legend>
           <div class="result-toggle">
-            <input type="radio" name="test_result" id="res_pending" value="" checked>
+            <input type="radio" name="test_result" id="res_pending" value="PENDING" checked>
             <label for="res_pending" class="pending">⏳ PENDING</label>
             <input type="radio" name="test_result" id="res_pass" value="PASS">
             <label for="res_pass" class="pass">✓ PASS</label>
@@ -1110,7 +1110,7 @@ function stampInfoOnCanvas(ctx, w, h){
   const weight = (r.Weight != null && r.Weight !== '') ? `Weight: ${r.Weight}g` : null;
   const colorWick = [r.Color, r.Wick].filter(Boolean).join(' · ') || null;
 
-  const title = 'ISUN PRODUCTS VIET NAM CO.,LTD';
+  const title = 'iSUN Viet Nam';
   const lines = [
     `PO: ${poName}`,
     `ITEM: ${r.Product_Code ?? '—'}`,
@@ -1120,7 +1120,7 @@ function stampInfoOnCanvas(ctx, w, h){
 
   if(!lines.length) return;
 
-  const fontSize = Math.max(18, Math.round(w * 0.024));
+  const fontSize = Math.max(16, Math.round(w * 0.024));
   const titleSize = Math.round(fontSize * 0.82);
   const lineHeight = Math.round(fontSize * 1.5);
   const paddingX = Math.round(fontSize * 0.9);
@@ -1299,11 +1299,9 @@ async function editRow(id){
     document.getElementById('test_date').value = r.Test_date ?? (r.Start ? r.Start.slice(0,10) : todayISO());
     document.getElementById('tester').value = r.Tester ?? '';
     document.getElementById('approved').value = r.Approved ?? '';
-
     document.getElementById('res_pass').checked = r.Test_result === 'PASS';
     document.getElementById('res_fail').checked = r.Test_result === 'FAIL';
-    document.getElementById('res_pending').checked = !r.Test_result;
-
+    document.getElementById('res_pending').checked = (r.Test_result === 'PENDING') || !r.Test_result;
     enterEditMode(r.Id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }catch(err){
@@ -1376,7 +1374,7 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     time: (document.getElementById('start_datetime').value || '').slice(11,16) || null,
     tester: document.getElementById('tester').value || null,
     approved: document.getElementById('approved').value || null,
-    test_result: (resultEl && resultEl.value) ? resultEl.value : null,
+    test_result: resultEl ? resultEl.value : 'PENDING',
   };
 
   if(!payload.po_id){ showMsg(msg, 'Vui lòng chọn PO trước khi lưu', true); return; }
@@ -1606,7 +1604,7 @@ async function importOneRow(row){
     time: null,
     tester: null,
     approved: null,
-    test_result: null
+    test_result: 'PENDING'
   };
 
   const res = await fetch(`${API}/po-details`, {

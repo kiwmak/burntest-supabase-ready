@@ -201,28 +201,12 @@ router.put('/:id', async (req, res, next) => {
     if (ee) throw ee;
     if (!existing) return res.status(404).json({ error: 'Không tìm thấy bản ghi test' });
 
-    // Ghép dữ liệu tường minh từng trường — KHÔNG dùng {...existing, ...req.body} vì tên field
-    // frontend gửi lên (VD: test_result, diameter, approved) khác tên cột thật trong DB
-    // (VD: result, diameter_mm, approver). Spread kiểu cũ khiến giá trị cũ trong DB "che mất"
-    // giá trị mới gửi lên do 2 field trùng nghĩa nhưng khác tên không hề ghi đè lẫn nhau.
     const p = validatePayload({
+      ...existing,
+      ...req.body,
       purchase_order_id: req.body.purchase_order_id ?? req.body.po_id ?? existing.purchase_order_id,
       product_code: req.body.product_code ?? existing.product_code,
-      diameter_mm: req.body.diameter_mm ?? req.body.diameter ?? existing.diameter_mm,
-      height_mm: req.body.height_mm ?? req.body.height ?? existing.height_mm,
-      fragrance: req.body.fragrance ?? req.body.frag ?? existing.fragrance,
-      color: req.body.color ?? existing.color,
-      wick: req.body.wick ?? existing.wick,
-      temperature_c: req.body.temperature_c ?? req.body.temperature ?? existing.temperature_c,
-      test_date: req.body.test_date ?? existing.test_date,
-      test_time: req.body.test_time ?? req.body.time ?? existing.test_time,
-      start_datetime: req.body.start_datetime ?? req.body.start ?? existing.start_datetime,
-      end_datetime: req.body.end_datetime ?? req.body.end ?? existing.end_datetime,
-      total_burn_time: req.body.total_burn_time ?? req.body.totalBurnTime ?? existing.total_burn_time,
-      tester: req.body.tester ?? existing.tester,
-      approver: req.body.approver ?? req.body.approved ?? existing.approver,
-      result: req.body.result ?? req.body.test_result ?? existing.result,
-      note: req.body.note ?? existing.note
+      test_date: req.body.test_date ?? existing.test_date
     }, true);
 
     const { data: po, error: pe } = await supabase.from('purchase_orders').select('id').eq('id', p.purchase_order_id).maybeSingle();
