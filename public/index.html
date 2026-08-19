@@ -469,6 +469,7 @@
   </div>
   <div class="header-stats">
     <div class="stat"><b id="statTotal">–</b><small>Tổng test</small></div>
+     <div class="stat"><b id="statPending" style="color:#ff9628">–</b><small>Pending</small></div>
     <div class="stat"><b id="statPass" style="color:#7FBB93">–</b><small>Pass</small></div>
     <div class="stat"><b id="statFail" style="color:#E39C90">–</b><small>Fail</small></div>
   </div>
@@ -566,7 +567,7 @@
           <legend>Kết quả</legend>
           <div class="result-toggle">
             <input type="radio" name="test_result" id="res_pending" value="" checked>
-            <label for="res_pending" class="pending">⏳ CHỜ</label>
+            <label for="res_pending" class="pending">⏳ PENDING</label>
             <input type="radio" name="test_result" id="res_pass" value="PASS">
             <label for="res_pass" class="pass">✓ PASS</label>
             <input type="radio" name="test_result" id="res_fail" value="FAIL">
@@ -624,7 +625,8 @@
         <select id="filterPo"><option value="">Tất cả PO</option></select>
         <select id="filterResult">
           <option value="">Tất cả kết quả</option>
-          <option value="PASS">PASS</option>
+         <option value="PENDING">PENDING</option>
+         <option value="PASS">PASS</option>
           <option value="FAIL">FAIL</option>
         </select>
         <input type="text" id="filterProduct" placeholder="Tìm mã sản phẩm...">
@@ -782,7 +784,7 @@ function formatDateTime(value){
 function stampHtml(result){
   if(result === 'PASS') return '<span class="stamp pass">PASS</span>';
   if(result === 'FAIL') return '<span class="stamp fail">FAIL</span>';
-  return '<span class="stamp pending">CHỜ</span>';
+  return '<span class="stamp pending">PENDING</span>';
 }
 function todayISO(){
   return new Date().toISOString().slice(0,10);
@@ -853,6 +855,7 @@ async function loadTable(resetPage = true){
   // Stats (không phụ thuộc filter)
   const summary = await fetch(`${API}/po-details/summary`).then(r => r.json());
   document.getElementById('statTotal').textContent = summary.total ?? 0;
+  document.getElementById('statPending').textContent = summary.pending_count ?? 0;
   document.getElementById('statPass').textContent = summary.pass_count ?? 0;
   document.getElementById('statFail').textContent = summary.fail_count ?? 0;
 }
