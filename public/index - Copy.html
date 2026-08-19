@@ -387,7 +387,7 @@
   }
   .pic-actions{ display:flex; gap:10px; align-items:center; }
 
-  /* ---- Camera chụp trực tiếp (portrait/landscape tự thích ứng) ---- */
+  /* ---- Xác nhận ảnh chụp từ camera gốc điện thoại (đã đóng dấu thông tin) ---- */
   .camera-overlay{
     display:none; position:fixed; inset:0; background:#000; z-index:300;
     flex-direction:column;
@@ -405,35 +405,20 @@
     flex:1; position:relative; overflow:hidden;
     display:flex; align-items:center; justify-content:center; background:#000; min-height:0;
   }
-  #cameraVideo{ width:100%; height:100%; object-fit:cover; display:block; }
-  .camera-frame{
-    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-    border:2px solid rgba(255,255,255,0.9); border-radius:6px;
-    box-shadow:0 0 0 9999px rgba(0,0,0,0.4);
-    pointer-events:none; transition: width .2s ease, height .2s ease;
-  }
-  .camera-frame.portrait{ width:min(78vw, 78vh * 3 / 4); aspect-ratio: 3 / 4; }
-  .camera-frame.landscape{ width:min(90vw, 78vh * 4 / 3); aspect-ratio: 4 / 3; }
-  .camera-hint{
-    position:absolute; bottom:14px; left:0; right:0; text-align:center;
-    color:rgba(255,255,255,0.85); font-size:11.5px; font-family:'Inter',sans-serif;
-    pointer-events:none; text-shadow:0 1px 3px rgba(0,0,0,0.6);
+  #capturePreviewImg{ max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  .camera-loading{
+    color:white; text-align:center; padding:24px; font-size:13px; line-height:1.6;
+    font-family:'Inter',sans-serif;
   }
   .camera-error{
     color:white; text-align:center; padding:24px; font-size:13px; line-height:1.6;
     font-family:'Inter',sans-serif;
   }
   .camera-controls{
-    padding:18px; display:flex; justify-content:center; align-items:center;
+    padding:18px; display:flex; justify-content:center; align-items:center; gap:14px;
     background:rgba(0,0,0,0.45); flex-shrink:0;
   }
-  #captureBtn{
-    width:68px; height:68px; border-radius:50%; padding:0; margin:0;
-    background:white; border:4px solid var(--copper);
-    font-size:22px; display:flex; align-items:center; justify-content:center;
-  }
-  #captureBtn:hover{ background: var(--paper-2); }
-  #captureBtn:active{ transform: scale(0.94); }
+  .camera-controls .btn{ width:auto; padding:12px 26px; margin:0; }
 
   /* Lightbox phóng to ảnh */
   .lightbox{
@@ -758,19 +743,22 @@ CBE	YN26-0151	22488P	70	80	123	WHITE	T27"></textarea>
 <!-- ============ CAMERA CHỤP TRỰC TIẾP — tự thích ứng dọc/ngang ============ -->
 <div class="camera-overlay" id="cameraOverlay">
   <div class="camera-topbar">
-    <span id="cameraSlotLabel">Chụp ảnh</span>
+    <span id="cameraSlotLabel">Xem lại ảnh</span>
     <button class="modal-close" type="button" onclick="closeCamera()">✕</button>
   </div>
   <div class="camera-viewport" id="cameraViewport">
-    <video id="cameraVideo" autoplay playsinline muted></video>
-    <div class="camera-frame" id="cameraFrame"></div>
-    <div class="camera-hint">Khung tự xoay theo chiều cầm máy · Thông tin sẽ được đóng dấu vào ảnh</div>
+    <div class="camera-loading" id="cameraLoading">Đang xử lý ảnh…</div>
+    <img id="capturePreviewImg" style="display:none;" alt="Ảnh vừa chụp">
   </div>
   <div class="camera-controls">
-    <button type="button" id="captureBtn" title="Chụp">📸</button>
+    <button type="button" class="btn btn-ghost" id="retakeBtn">🔄 Chụp lại</button>
+    <button type="button" class="btn" id="useCaptureBtn">✓ Dùng ảnh này</button>
   </div>
   <canvas id="captureCanvas" style="display:none;"></canvas>
 </div>
+
+<!-- Input ẩn: mở thẳng camera gốc của điện thoại (capture="environment") để đảm bảo ảnh luôn đúng chiều -->
+<input type="file" id="cameraFileInput" accept="image/*" capture="environment" style="display:none;">
 
 
 <script>
@@ -993,7 +981,7 @@ async function openImageModal(id){
 function closeImageModal(){
   document.getElementById('imageModal').classList.remove('show');
   currentModalRow = null;
-  if(cameraStream){ closeCamera(); } // an toàn: đảm bảo tắt camera nếu còn đang mở
+  closeCamera(); // an toàn: đảm bảo đóng luôn màn hình xem trước ảnh nếu còn đang mở
 }
 
 // ---------- Kéo-thả ảnh vào từng ô PIC ----------
@@ -1097,85 +1085,16 @@ function closeLightbox(){
   document.getElementById('lightbox').classList.remove('show');
 }
 
-// ---------- Camera chụp trực tiếp: tự nhận hướng dọc/ngang, đóng dấu thông tin vào ảnh ----------
-let cameraStream = null;
+// ---------- Camera: dùng camera gốc điện thoại (capture="environment") để đảm bảo ảnh luôn đúng chiều ----------
+// Lý do không tự dựng camera bằng getUserMedia: một số trình duyệt/thiết bị trả khung hình
+// theo chiều cảm biến gốc, không khớp với chiều đang cầm máy, dẫn tới ảnh bị xoay sai khi lưu.
+// Dùng input capture để giao hẳn việc chụp cho app Camera của hệ điều hành — nơi luôn xử lý
+// đúng chiều ảnh 100%, sau đó ta chỉ xử lý đóng dấu thông tin lên ảnh tĩnh đã chụp xong.
 let cameraTargetId = null;
 let cameraTargetSlot = null;
+let lastStampedBlob = null;
 
-async function openCamera(id, slot){
-  cameraTargetId = id;
-  cameraTargetSlot = slot;
-
-  const slotNum = String(slot).match(/([1-5])$/)?.[1] || '?';
-  document.getElementById('cameraSlotLabel').textContent = `Chụp ảnh — Ảnh ${slotNum}`;
-  document.getElementById('cameraOverlay').classList.add('show');
-
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    showCameraError('Trình duyệt này không hỗ trợ truy cập camera. Hãy dùng nút "Tải lên" thay thế.');
-    return;
-  }
-
-  updateCameraFrameOrientation();
-
-  try{
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      },
-      audio: false
-    });
-    const video = document.getElementById('cameraVideo');
-    if(video){
-      video.srcObject = cameraStream;
-    }
-  }catch(err){
-    showCameraError(
-      'Không thể mở camera: ' + err.message +
-      '<br>Kiểm tra đã cấp quyền camera cho trình duyệt, và trang đang chạy qua HTTPS hoặc localhost (camera bị chặn trên HTTP thường).'
-    );
-  }
-}
-
-function showCameraError(html){
-  const viewport = document.getElementById('cameraViewport');
-  if(viewport) viewport.innerHTML = `<div class="camera-error">${html}</div>`;
-}
-
-function restoreCameraViewport(){
-  const viewport = document.getElementById('cameraViewport');
-  if(viewport && !viewport.querySelector('#cameraVideo')){
-    viewport.innerHTML = `
-      <video id="cameraVideo" autoplay playsinline muted></video>
-      <div class="camera-frame" id="cameraFrame"></div>
-      <div class="camera-hint">Khung tự xoay theo chiều cầm máy · Thông tin sẽ được đóng dấu vào ảnh</div>
-    `;
-  }
-}
-
-function closeCamera(){
-  document.getElementById('cameraOverlay').classList.remove('show');
-  if(cameraStream){
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
-  restoreCameraViewport();
-  cameraTargetId = null;
-  cameraTargetSlot = null;
-}
-
-function updateCameraFrameOrientation(){
-  const frame = document.getElementById('cameraFrame');
-  if(!frame) return;
-  const isPortrait = window.matchMedia('(orientation: portrait)').matches;
-  frame.classList.toggle('portrait', isPortrait);
-  frame.classList.toggle('landscape', !isPortrait);
-}
-window.addEventListener('orientationchange', updateCameraFrameOrientation);
-window.addEventListener('resize', updateCameraFrameOrientation);
-
-// Vẽ khung bo tròn (dùng để vẽ nền cho tem thông tin trên ảnh)
+// Vẽ khung bo tròn (dùng làm nền cho tem thông tin trên ảnh)
 function roundRect(ctx, x, y, w, h, r){
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -1214,11 +1133,10 @@ function stampInfoOnCanvas(ctx, w, h){
   const lineHeight = Math.round(fontSize * 1.5);
   const paddingX = Math.round(fontSize * 0.9);
   const paddingY = Math.round(fontSize * 0.7);
-  const titleGap = Math.round(fontSize * 0.55); // khoảng cách + đường kẻ dưới tiêu đề
+  const titleGap = Math.round(fontSize * 0.55);
 
   ctx.textBaseline = 'top';
 
-  // Đo chiều rộng cần thiết (lấy dòng dài nhất giữa tiêu đề và các dòng thông tin)
   ctx.font = `700 ${titleSize}px 'Space Grotesk', Arial, sans-serif`;
   let maxWidth = ctx.measureText(title).width;
   ctx.font = `600 ${fontSize}px 'Space Grotesk', Arial, sans-serif`;
@@ -1231,26 +1149,22 @@ function stampInfoOnCanvas(ctx, w, h){
   const boxX = margin;
   const boxY = h - boxH - margin;
 
-  // Nền tối mờ + vạch đồng cam bên trái (đồng bộ phong cách thiết kế chung)
   ctx.fillStyle = 'rgba(29,27,24,0.76)';
   roundRect(ctx, boxX, boxY, boxW, boxH, 8);
   ctx.fill();
   ctx.fillStyle = 'rgba(181,98,44,1)';
   ctx.fillRect(boxX, boxY, 5, boxH);
 
-  // Tiêu đề
   let cursorY = boxY + paddingY;
   ctx.font = `700 ${titleSize}px 'Space Grotesk', Arial, sans-serif`;
   ctx.fillStyle = 'rgba(181,98,44,1)';
   ctx.fillText(title, boxX + paddingX, cursorY);
   cursorY += titleSize + titleGap;
 
-  // Đường kẻ phân cách dưới tiêu đề
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.fillRect(boxX + paddingX, cursorY, boxW - paddingX * 2, 1);
   cursorY += titleGap;
 
-  // Các dòng thông tin
   ctx.font = `600 ${fontSize}px 'Space Grotesk', Arial, sans-serif`;
   ctx.fillStyle = '#FFFFFF';
   lines.forEach((line) => {
@@ -1259,71 +1173,102 @@ function stampInfoOnCanvas(ctx, w, h){
   });
 }
 
-// Xác định góc xoay thiết bị hiện tại (0/90/180/270), ưu tiên API mới, fallback API cũ
-function getDeviceOrientationAngle(){
-  if(window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number'){
-    return ((window.screen.orientation.angle % 360) + 360) % 360;
-  }
-  if(typeof window.orientation === 'number'){
-    return ((window.orientation % 360) + 360) % 360;
-  }
-  return 0; // không xác định được -> coi như dọc, không xoay thêm
+function openCamera(id, slot){
+  cameraTargetId = id;
+  cameraTargetSlot = slot;
+  const input = document.getElementById('cameraFileInput');
+  input.value = ''; // reset để chọn lại cùng 1 ảnh vẫn kích hoạt sự kiện change
+  input.click();
 }
 
-// Quyết định có cần tự xoay khung hình lại hay không: so sánh chiều máy đang cầm (theo góc xoay)
-// với chiều thực tế của khung hình camera trả về (một số trình duyệt/thiết bị Android trả khung
-// theo chiều cảm biến gốc, không tự xoay theo hướng cầm máy).
-function decideCaptureRotation(videoWidth, videoHeight, deviceAngle){
-  const deviceIsPortrait = (deviceAngle === 0 || deviceAngle === 180);
-  const frameIsPortrait = videoHeight >= videoWidth;
-
-  if(deviceIsPortrait === frameIsPortrait){
-    return 0; // khung hình đã đúng chiều, không cần xoay
-  }
-  // Máy đang cầm dọc nhưng khung hình lại ngang (hoặc ngược lại) -> xoay 90° để khớp
-  return deviceAngle === 270 ? -90 : 90;
-}
-
-document.getElementById('captureBtn').addEventListener('click', () => {
-  const video = document.getElementById('cameraVideo');
-  if(!video || !video.videoWidth){
-    alert('Camera chưa sẵn sàng, thử lại sau giây lát.');
-    return;
-  }
-
-  const canvas = document.getElementById('captureCanvas');
-  const ctx = canvas.getContext('2d');
-
-  const deviceAngle = getDeviceOrientationAngle();
-  const rotateDeg = decideCaptureRotation(video.videoWidth, video.videoHeight, deviceAngle);
-
-  if(rotateDeg === 0){
-    // Trường hợp bình thường (đa số trình duyệt hiện đại): khung hình camera đã đúng chiều
-    // cầm máy sẵn, chỉ cần vẽ thẳng ra canvas theo đúng kích thước gốc.
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  } else {
-    // Khung hình lệch chiều so với cách đang cầm máy -> xoay lại canvas cho đúng
-    canvas.width = video.videoHeight;
-    canvas.height = video.videoWidth;
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate(rotateDeg * Math.PI / 180);
-    ctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
-    ctx.restore();
-  }
-
-  stampInfoOnCanvas(ctx, canvas.width, canvas.height);
-
-  canvas.toBlob((blob) => {
-    if(!blob){ alert('Không tạo được ảnh, thử lại.'); return; }
-    const file = new File([blob], `test-${Date.now()}.jpg`, { type: 'image/jpeg' });
-    const id = cameraTargetId, slot = cameraTargetSlot;
-    closeCamera();
-    uploadImageToSlot(id, slot, file);
-  }, 'image/jpeg', 0.92);
+document.getElementById('cameraFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  await processCapturedPhoto(file);
 });
+
+async function processCapturedPhoto(file){
+  document.getElementById('cameraOverlay').classList.add('show');
+  showCameraLoading();
+
+  try{
+    const img = await loadImageFromFile(file);
+
+    const canvas = document.getElementById('captureCanvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+
+    // Vẽ đúng nguyên ảnh gốc mà camera máy đã chụp — giữ nguyên chiều dọc/ngang lúc chụp,
+    // vì đây là ảnh tĩnh do OS xử lý sẵn, không phải luồng video cần tự đoán góc xoay.
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    stampInfoOnCanvas(ctx, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      lastStampedBlob = blob;
+      showCapturePreview(canvas);
+    }, 'image/jpeg', 0.92);
+  }catch(err){
+    showCameraError('Không đọc được ảnh vừa chụp: ' + err.message);
+  }
+}
+
+function loadImageFromFile(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File ảnh không hợp lệ')); };
+    img.src = url;
+  });
+}
+
+function showCameraLoading(){
+  document.getElementById('cameraLoading').style.display = 'block';
+  document.getElementById('capturePreviewImg').style.display = 'none';
+}
+
+function showCapturePreview(canvas){
+  const previewImg = document.getElementById('capturePreviewImg');
+  previewImg.src = canvas.toDataURL('image/jpeg', 0.92);
+  document.getElementById('cameraLoading').style.display = 'none';
+  previewImg.style.display = 'block';
+}
+
+function showCameraError(message){
+  const viewport = document.getElementById('cameraViewport');
+  viewport.innerHTML = `<div class="camera-error">${message}</div>`;
+}
+
+function closeCamera(){
+  document.getElementById('cameraOverlay').classList.remove('show');
+  lastStampedBlob = null;
+  cameraTargetId = null;
+  cameraTargetSlot = null;
+  // khôi phục viewport nếu trước đó bị thay bằng thông báo lỗi
+  const viewport = document.getElementById('cameraViewport');
+  if(viewport && !viewport.querySelector('#capturePreviewImg')){
+    viewport.innerHTML = `
+      <div class="camera-loading" id="cameraLoading" style="display:none;">Đang xử lý ảnh…</div>
+      <img id="capturePreviewImg" style="display:none;" alt="Ảnh vừa chụp">
+    `;
+  }
+}
+
+document.getElementById('retakeBtn').addEventListener('click', () => {
+  document.getElementById('cameraOverlay').classList.remove('show');
+  lastStampedBlob = null;
+  document.getElementById('cameraFileInput').click();
+});
+
+document.getElementById('useCaptureBtn').addEventListener('click', () => {
+  if(!lastStampedBlob){ alert('Chưa có ảnh để dùng, hãy chụp lại.'); return; }
+  const file = new File([lastStampedBlob], `test-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  const id = cameraTargetId, slot = cameraTargetSlot;
+  closeCamera();
+  uploadImageToSlot(id, slot, file);
+});
+
 
 document.getElementById('imageModal').addEventListener('click', (e) => {
   if(e.target.id === 'imageModal') closeImageModal();
