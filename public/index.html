@@ -1064,17 +1064,7 @@ function openLightbox(url){
       : '—';
     const weight = (r.Weight != null && r.Weight !== '') ? `${r.Weight}g` : '—';
 
-    info.innerHTML = `
-      <div class="lb-title">Thông tin sản phẩm</div>
-      <div class="lb-row"><span class="lb-label">Đơn hàng</span><span class="lb-value">${poName}</span></div>
-      <div class="lb-row"><span class="lb-label">Mã hàng</span><span class="lb-value mono">${r.Product_Code ?? '—'}</span></div>
-      <div class="lb-row"><span class="lb-label">Màu sắc</span><span class="lb-value">${r.Color ?? '—'}</span></div>
-      <div class="lb-row"><span class="lb-label">Loại bấc</span><span class="lb-value">${r.Wick ?? '—'}</span></div>
-      <div class="lb-row"><span class="lb-label">Kích thước</span><span class="lb-value mono">${size}</span></div>
-      <div class="lb-row"><span class="lb-label">Trọng lượng</span><span class="lb-value mono">${weight}</span></div>
-    `;
-    info.style.display = 'block';
-  } else {
+      } else {
     info.innerHTML = '';
     info.style.display = 'none';
   }
