@@ -1052,38 +1052,6 @@ async function uploadImageToSlot(id, slot, file, frameEl){
   }
 }
 
-function openLightbox(url){
-  document.getElementById('lightboxImg').src = url;
-
-  const info = document.getElementById('lightboxInfo');
-  const r = currentModalRow;
-  if(r){
-    const poName = (posCache.find(p => p.PO_Id === r.PO_Id) || {}).PO_Name || r.PO_Id;
-    const size = (r.Diameter != null || r.Height != null)
-      ? `Ø${r.Diameter ?? '?'} × C${r.Height ?? '?'}`
-      : '—';
-    const weight = (r.Weight != null && r.Weight !== '') ? `${r.Weight}g` : '—';
-
-    info.innerHTML = `
-      <div class="lb-title">Thông tin sản phẩm</div>
-      <div class="lb-row"><span class="lb-label">Đơn hàng</span><span class="lb-value">${poName}</span></div>
-      <div class="lb-row"><span class="lb-label">Mã hàng</span><span class="lb-value mono">${r.Product_Code ?? '—'}</span></div>
-      <div class="lb-row"><span class="lb-label">Màu sắc</span><span class="lb-value">${r.Color ?? '—'}</span></div>
-      <div class="lb-row"><span class="lb-label">Loại bấc</span><span class="lb-value">${r.Wick ?? '—'}</span></div>
-      <div class="lb-row"><span class="lb-label">Kích thước</span><span class="lb-value mono">${size}</span></div>
-      <div class="lb-row"><span class="lb-label">Trọng lượng</span><span class="lb-value mono">${weight}</span></div>
-    `;
-    info.style.display = 'block';
-  } else {
-    info.innerHTML = '';
-    info.style.display = 'none';
-  }
-
-  document.getElementById('lightbox').classList.add('show');
-}
-function closeLightbox(){
-  document.getElementById('lightbox').classList.remove('show');
-}
 
 // ---------- Camera: dùng camera gốc điện thoại (capture="environment") để đảm bảo ảnh luôn đúng chiều ----------
 // Lý do không tự dựng camera bằng getUserMedia: một số trình duyệt/thiết bị trả khung hình
