@@ -1110,14 +1110,13 @@ function stampInfoOnCanvas(ctx, w, h){
   const weight = (r.Weight != null && r.Weight !== '') ? `Weight: ${r.Weight}g` : null;
   const colorWick = [r.Color, r.Wick].filter(Boolean).join(' · ') || null;
 
-  const title = 'THÔNG TIN SẢN PHẨM';
+  const title = 'INSUN VIỆT NAM';
   const lines = [
     `PO: ${poName}`,
-    `Mã hàng: ${r.Product_Code ?? '—'}`,
+    `ITEM: ${r.Product_Code ?? '—'}`,
     colorWick,
     size,
-    weight
-  ].filter(Boolean);
+    ].filter(Boolean);
 
   if(!lines.length) return;
 
