@@ -1105,12 +1105,12 @@ function stampInfoOnCanvas(ctx, w, h){
 
   const poName = (posCache.find(p => p.PO_Id === r.PO_Id) || {}).PO_Name || r.PO_Id;
   const size = (r.Diameter != null || r.Height != null)
-    ? `Size: Ø${r.Diameter ?? '?'} × C${r.Height ?? '?'}`
+    ? `Size: Ø${r.Diameter ?? '?'} × H${r.Height ?? '?'}`
     : null;
   const weight = (r.Weight != null && r.Weight !== '') ? `Weight: ${r.Weight}g` : null;
   const colorWick = [r.Color, r.Wick].filter(Boolean).join(' · ') || null;
 
-  const title = 'INSUN VIỆT NAM';
+  const title = 'ISUN PRODUCTS VIET NAM CO.,LTD';
   const lines = [
     `PO: ${poName}`,
     `ITEM: ${r.Product_Code ?? '—'}`,
