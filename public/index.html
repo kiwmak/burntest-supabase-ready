@@ -1105,12 +1105,12 @@ function stampInfoOnCanvas(ctx, w, h){
 
   const poName = (posCache.find(p => p.PO_Id === r.PO_Id) || {}).PO_Name || r.PO_Id;
   const size = (r.Diameter != null || r.Height != null)
-    ? `Size: Ø${r.Diameter ?? '?'} × H${r.Height ?? '?'}`
+    ? `SIZE: Ø${r.Diameter ?? '?'} × H${r.Height ?? '?'}`
     : null;
   const weight = (r.Weight != null && r.Weight !== '') ? `Weight: ${r.Weight}g` : null;
   const colorWick = [r.Color, r.Wick].filter(Boolean).join(' · ') || null;
 
-  const title = 'iSUN Viet Nam';
+  const title = '越南ISUN制品有限公司';
   const lines = [
     `PO: ${poName}`,
     `ITEM: ${r.Product_Code ?? '—'}`,
@@ -1120,7 +1120,7 @@ function stampInfoOnCanvas(ctx, w, h){
 
   if(!lines.length) return;
 
-  const fontSize = Math.max(16, Math.round(w * 0.024));
+  const fontSize = Math.max(17, Math.round(w * 0.024));
   const titleSize = Math.round(fontSize * 0.82);
   const lineHeight = Math.round(fontSize * 1.5);
   const paddingX = Math.round(fontSize * 0.9);
