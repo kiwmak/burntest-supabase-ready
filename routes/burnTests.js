@@ -1,7 +1,6 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const crypto = require('crypto');
 const { supabase, SUPABASE_STORAGE_BUCKET } = require('../database/database');
 
 const router = express.Router();
@@ -195,6 +194,63 @@ router.post('/', async (req, res, next) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+function sanitizeProductCode(code) {
+  // Dùng làm tên thư mục trên Supabase Storage -> loại bỏ ký tự không an toàn (/, khoảng trắng, v.v).
+  const safe = String(code ?? '').trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!safe) throw new Error('product_code không hợp lệ để tạo đường dẫn lưu ảnh');
+  return safe;
+}
+
+function buildPhotoPath(poNumber, productCode, slot, ext) {
+  return `${sanitizeProductCode(poNumber)}/${sanitizeProductCode(productCode)}/burn-test-${slot}${ext}`;
+}
+
+// Khi đổi PO hoặc mã hàng của 1 test đã có ảnh, di chuyển toàn bộ ảnh trong Storage
+// sang đường dẫn mới (theo PO/mã hàng mới) và cập nhật lại file_name/file_url trong DB.
+async function movePhotosOnCodeChange(testId, oldPoNumber, oldProductCode, newPoNumber, newProductCode) {
+  const oldSafe = sanitizeProductCode(oldPoNumber);
+  const newSafe = sanitizeProductCode(newPoNumber);
+  const oldCodeSafe = sanitizeProductCode(oldProductCode);
+  const newCodeSafe = sanitizeProductCode(newProductCode);
+  if (oldSafe === newSafe && oldCodeSafe === newCodeSafe) return { moved: 0, failed: 0 };
+
+  const { data: photos, error: fe } = await supabase.from('burn_test_photos')
+    .select('id, slot, file_name, mime_type').eq('burn_test_id', testId);
+  if (fe) throw fe;
+  if (!photos?.length) return { moved: 0, failed: 0 };
+
+  let moved = 0, failed = 0;
+  for (const photo of photos) {
+    try {
+      const ext = (path.extname(photo.file_name) || '.jpg').toLowerCase();
+      const newPath = buildPhotoPath(newPoNumber, newProductCode, photo.slot, ext);
+      if (newPath === photo.file_name) continue;
+
+      const { data: fileData, error: de } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET).download(photo.file_name);
+      if (de) throw de;
+      const buffer = Buffer.from(await fileData.arrayBuffer());
+
+      const { error: ue } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET)
+        .upload(newPath, buffer, { contentType: photo.mime_type || 'image/jpeg', upsert: true, cacheControl: '3600' });
+      if (ue) throw ue;
+
+      const fileUrl = supabase.storage.from(SUPABASE_STORAGE_BUCKET).getPublicUrl(newPath).data.publicUrl;
+      const { error: ude } = await supabase.from('burn_test_photos')
+        .update({ file_name: newPath, file_url: fileUrl }).eq('id', photo.id);
+      if (ude) { await supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([newPath]); throw ude; }
+
+      const { error: re } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([photo.file_name]);
+      if (re) console.warn(`⚠ Không xóa được ảnh cũ (${photo.file_name}):`, re.message);
+
+      moved++;
+    } catch (err) {
+      failed++;
+      console.warn(`⚠ Không di chuyển được ảnh #${photo.id} (test ${testId}):`, err.message);
+    }
+  }
+  return { moved, failed };
+}
+
 router.put('/:id', async (req, res, next) => {
   try {
     const { data: existing, error: ee } = await supabase.from('burn_tests').select('*').eq('id', req.params.id).maybeSingle();
@@ -225,7 +281,7 @@ router.put('/:id', async (req, res, next) => {
       note: req.body.note ?? existing.note
     }, true);
 
-    const { data: po, error: pe } = await supabase.from('purchase_orders').select('id').eq('id', p.purchase_order_id).maybeSingle();
+    const { data: po, error: pe } = await supabase.from('purchase_orders').select('id, po_number').eq('id', p.purchase_order_id).maybeSingle();
     if (pe) throw pe;
     if (!po) return res.status(400).json({ error: 'PO không tồn tại' });
 
@@ -242,6 +298,19 @@ router.put('/:id', async (req, res, next) => {
       updated_at: new Date().toISOString()
     }).eq('id', req.params.id);
     if (error) throw error;
+
+    // PO hoặc mã hàng đổi -> di chuyển toàn bộ ảnh sang đường dẫn mới trên Storage (theo po_number).
+    try {
+      let oldPoNumber = po.po_number;
+      if (String(existing.purchase_order_id) !== String(p.purchase_order_id)) {
+        const { data: oldPo } = await supabase.from('purchase_orders').select('po_number').eq('id', existing.purchase_order_id).maybeSingle();
+        oldPoNumber = oldPo?.po_number ?? String(existing.purchase_order_id);
+      }
+      await movePhotosOnCodeChange(req.params.id, oldPoNumber, existing.product_code, po.po_number, p.product_code);
+    } catch (moveErr) {
+      console.warn(`⚠ Lỗi di chuyển ảnh cho test ${req.params.id}:`, moveErr.message);
+    }
+
     res.json(await getTest(req.params.id));
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
@@ -274,15 +343,17 @@ function parseSlot(raw) {
 
 router.post(['/:id/photos', '/:id/images'], upload.single('file'), async (req, res, next) => {
   try {
-    const { data: test, error: te } = await supabase.from('burn_tests').select('id').eq('id', req.params.id).maybeSingle();
+    const { data: test, error: te } = await supabase.from('burn_tests')
+      .select('id, product_code, purchase_order:purchase_orders!inner(po_number)').eq('id', req.params.id).maybeSingle();
     if (te) throw te;
     if (!test) return res.status(404).json({ error: 'Không tìm thấy bản ghi test' });
     if (!req.file) return res.status(400).json({ error: 'Thiếu file ảnh' });
 
     const slot = parseSlot(req.body.slot ?? req.body.pic_slot);
     const ext = (path.extname(req.file.originalname).toLowerCase() || '.jpg').replace(/[^a-z0-9.]/g, '');
-    const safeName = `burn-test-${req.params.id}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
-    const storagePath = `burn-test-${req.params.id}/${safeName}`;
+    // Cấu trúc: {po_number}/{product_code}/burn-test-{slot}.{ext}
+    // Cố định theo slot -> ảnh mới tự động ghi đè ảnh cũ cùng vị trí.
+    const storagePath = buildPhotoPath(test.purchase_order.po_number, test.product_code, slot, ext);
 
     const { data: old, error: oe } = await supabase.from('burn_test_photos')
       .select('file_name').eq('burn_test_id', req.params.id).eq('slot', slot).maybeSingle();
@@ -291,7 +362,7 @@ router.post(['/:id/photos', '/:id/images'], upload.single('file'), async (req, r
     const { error: uploadError } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET)
       .upload(storagePath, req.file.buffer, {
         contentType: req.file.mimetype,
-        upsert: false,
+        upsert: true,
         cacheControl: '3600'
       });
     if (uploadError) throw uploadError;
@@ -314,6 +385,7 @@ router.post(['/:id/photos', '/:id/images'], upload.single('file'), async (req, r
       throw dbError;
     }
 
+    // Nếu ảnh cũ có đuôi file khác (vd .png -> .jpg) thì path sẽ khác -> xóa file cũ để tránh rác.
     if (old?.file_name && old.file_name !== storagePath) {
       const { error: removeError } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([old.file_name]);
       if (removeError) console.warn('Không xóa được ảnh cũ:', removeError.message);
