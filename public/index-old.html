@@ -385,6 +385,40 @@
     font-size:11px; color: var(--copper-dark); cursor:pointer; text-decoration:underline;
     background:none; border:none; padding:0; font-family:'Inter',sans-serif;
   }
+  .pic-actions{ display:flex; gap:10px; align-items:center; }
+
+  /* ---- Xác nhận ảnh chụp từ camera gốc điện thoại (đã đóng dấu thông tin) ---- */
+  .camera-overlay{
+    display:none; position:fixed; inset:0; background:#000; z-index:300;
+    flex-direction:column;
+  }
+  .camera-overlay.show{ display:flex; }
+  .camera-topbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 18px; color:white; font-family:'Space Grotesk', sans-serif;
+    font-weight:600; font-size:13.5px; background:rgba(0,0,0,0.45);
+    flex-shrink:0;
+  }
+  .camera-topbar .modal-close{ color:white; }
+  .camera-topbar .modal-close:hover{ color: var(--fail); }
+  .camera-viewport{
+    flex:1; position:relative; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; background:#000; min-height:0;
+  }
+  #capturePreviewImg{ max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  .camera-loading{
+    color:white; text-align:center; padding:24px; font-size:13px; line-height:1.6;
+    font-family:'Inter',sans-serif;
+  }
+  .camera-error{
+    color:white; text-align:center; padding:24px; font-size:13px; line-height:1.6;
+    font-family:'Inter',sans-serif;
+  }
+  .camera-controls{
+    padding:18px; display:flex; justify-content:center; align-items:center; gap:14px;
+    background:rgba(0,0,0,0.45); flex-shrink:0;
+  }
+  .camera-controls .btn{ width:auto; padding:12px 26px; margin:0; }
 
   /* Lightbox phóng to ảnh */
   .lightbox{
@@ -393,6 +427,34 @@
   }
   .lightbox.show{ display:flex; }
   .lightbox img{ max-width:100%; max-height:100%; border-radius: var(--radius); }
+
+  /* Panel thông tin sản phẩm ở góc khi xem ảnh phóng to */
+  .lightbox-info{
+    display:none;
+    position:absolute; left:24px; bottom:24px; max-width:300px; width:calc(100% - 48px);
+    background: rgba(29,27,24,0.92); color: var(--paper);
+    padding:14px 16px; border-radius:4px; border-left:3px solid var(--copper);
+    backdrop-filter: blur(2px);
+  }
+  .lightbox-info .lb-title{
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:13px;
+    margin-bottom:8px; color: white; letter-spacing:0.2px;
+  }
+  .lightbox-info .lb-row{
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    padding:5px 0; font-size:12px; border-bottom:1px solid rgba(255,255,255,0.1);
+  }
+  .lightbox-info .lb-row:last-child{ border-bottom:none; }
+  .lightbox-info .lb-label{
+    color:#A69B8B; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; white-space:nowrap;
+  }
+  .lightbox-info .lb-value{
+    color:white; font-weight:600; text-align:right;
+  }
+  .lightbox-info .lb-value.mono{ font-family:'IBM Plex Mono', monospace; font-weight:500; }
+  @media (max-width:640px){
+    .lightbox-info{ left:12px; right:12px; bottom:12px; width:auto; max-width:none; }
+  }
 </style>
 </head>
 <body>
@@ -407,7 +469,7 @@
   </div>
   <div class="header-stats">
     <div class="stat"><b id="statTotal">–</b><small>Tổng test</small></div>
-    <div class="stat"><b id="statPending" style="color:#E0A546">–</b><small>Pending</small></div>
+     <div class="stat"><b id="statPending" style="color:#ff9628">–</b><small>Pending</small></div>
     <div class="stat"><b id="statPass" style="color:#7FBB93">–</b><small>Pass</small></div>
     <div class="stat"><b id="statFail" style="color:#E39C90">–</b><small>Fail</small></div>
   </div>
@@ -504,7 +566,7 @@
         <fieldset>
           <legend>Kết quả</legend>
           <div class="result-toggle">
-            <input type="radio" name="test_result" id="res_pending" value="" checked>
+            <input type="radio" name="test_result" id="res_pending" value="PENDING" checked>
             <label for="res_pending" class="pending">⏳ PENDING</label>
             <input type="radio" name="test_result" id="res_pass" value="PASS">
             <label for="res_pass" class="pass">✓ PASS</label>
@@ -563,8 +625,8 @@
         <select id="filterPo"><option value="">Tất cả PO</option></select>
         <select id="filterResult">
           <option value="">Tất cả kết quả</option>
-          <option value="PENDING">PENDING</option>
-           <option value="PASS">PASS</option>
+         <option value="PENDING">PENDING</option>
+         <option value="PASS">PASS</option>
           <option value="FAIL">FAIL</option>
         </select>
         <input type="text" id="filterProduct" placeholder="Tìm mã sản phẩm...">
@@ -677,7 +739,28 @@ CBE	YN26-0151	22488P	70	80	123	WHITE	T27"></textarea>
 <!-- Lightbox phóng to 1 ảnh -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <img id="lightboxImg" src="" alt="Ảnh test đốt phóng to">
+  <div class="lightbox-info" id="lightboxInfo" onclick="event.stopPropagation()"></div>
 </div>
+
+<!-- ============ CAMERA CHỤP TRỰC TIẾP — tự thích ứng dọc/ngang ============ -->
+<div class="camera-overlay" id="cameraOverlay">
+  <div class="camera-topbar">
+    <span id="cameraSlotLabel">Xem lại ảnh</span>
+    <button class="modal-close" type="button" onclick="closeCamera()">✕</button>
+  </div>
+  <div class="camera-viewport" id="cameraViewport">
+    <div class="camera-loading" id="cameraLoading">Đang xử lý ảnh…</div>
+    <img id="capturePreviewImg" style="display:none;" alt="Ảnh vừa chụp">
+  </div>
+  <div class="camera-controls">
+    <button type="button" class="btn btn-ghost" id="retakeBtn">🔄 Chụp lại</button>
+    <button type="button" class="btn" id="useCaptureBtn">✓ Dùng ảnh này</button>
+  </div>
+  <canvas id="captureCanvas" style="display:none;"></canvas>
+</div>
+
+<!-- Input ẩn: mở thẳng camera gốc của điện thoại (capture="environment") để đảm bảo ảnh luôn đúng chiều -->
+<input type="file" id="cameraFileInput" accept="image/*" capture="environment" style="display:none;">
 
 
 <script>
@@ -686,6 +769,7 @@ let clientsCache = [];
 let posCache = [];
 let currentEditId = null;
 let rowsCache = {};
+let currentModalRow = null; // bản ghi đang xem trong modal ảnh, dùng cho panel thông tin lightbox
 
 // ---------- Helpers ----------
 function showMsg(el, text, isErr){
@@ -905,6 +989,7 @@ async function openImageModal(id){
     r = await fetch(`${API}/po-details/${id}`).then(res => res.json());
   }
   if(r.error){ alert('Không tải được dữ liệu bản ghi'); return; }
+  currentModalRow = r;
 
   document.getElementById('modalProductCode').textContent = r.Product_Code;
   document.getElementById('modalPo').textContent = (posCache.find(p => p.PO_Id === r.PO_Id) || {}).PO_Name || r.PO_Id;
@@ -929,10 +1014,13 @@ async function openImageModal(id){
         </div>
         <div class="pic-label">
           <span>Ảnh ${num}</span>
-          <label class="pic-upload-btn">
-            ${url ? 'Thay ảnh' : 'Tải lên'}
-            <input type="file" accept="image/*" style="display:none" onchange="uploadImageToSlot(${r.Id}, '${slot}', this.files[0])">
-          </label>
+          <div class="pic-actions">
+            <button type="button" class="pic-upload-btn" onclick="openCamera(${r.Id}, '${slot}')">📷 Chụp</button>
+            <label class="pic-upload-btn">
+              ${url ? 'Thay ảnh' : 'Tải lên'}
+              <input type="file" accept="image/*" style="display:none" onchange="uploadImageToSlot(${r.Id}, '${slot}', this.files[0])">
+            </label>
+          </div>
         </div>
       </div>
     `;
@@ -944,6 +1032,8 @@ async function openImageModal(id){
 
 function closeImageModal(){
   document.getElementById('imageModal').classList.remove('show');
+  currentModalRow = null;
+  closeCamera(); // an toàn: đảm bảo đóng luôn màn hình xem trước ảnh nếu còn đang mở
 }
 
 // ---------- Kéo-thả ảnh vào từng ô PIC ----------
@@ -1017,17 +1107,216 @@ async function uploadImageToSlot(id, slot, file, frameEl){
 
 function openLightbox(url){
   document.getElementById('lightboxImg').src = url;
+
+  const info = document.getElementById('lightboxInfo');
+  const r = currentModalRow;
+  if(r){
+    const poName = (posCache.find(p => p.PO_Id === r.PO_Id) || {}).PO_Name || r.PO_Id;
+    const size = (r.Diameter != null || r.Height != null)
+      ? `Ø${r.Diameter ?? '?'} × C${r.Height ?? '?'}`
+      : '—';
+    const weight = (r.Weight != null && r.Weight !== '') ? `${r.Weight}g` : '—';
+
+      } else {
+    info.innerHTML = '';
+    info.style.display = 'none';
+  }
+
   document.getElementById('lightbox').classList.add('show');
 }
 function closeLightbox(){
   document.getElementById('lightbox').classList.remove('show');
 }
 
+// ---------- Camera: dùng camera gốc điện thoại (capture="environment") để đảm bảo ảnh luôn đúng chiều ----------
+// Lý do không tự dựng camera bằng getUserMedia: một số trình duyệt/thiết bị trả khung hình
+// theo chiều cảm biến gốc, không khớp với chiều đang cầm máy, dẫn tới ảnh bị xoay sai khi lưu.
+// Dùng input capture để giao hẳn việc chụp cho app Camera của hệ điều hành — nơi luôn xử lý
+// đúng chiều ảnh 100%, sau đó ta chỉ xử lý đóng dấu thông tin lên ảnh tĩnh đã chụp xong.
+let cameraTargetId = null;
+let cameraTargetSlot = null;
+let lastStampedBlob = null;
+
+// Vẽ khung bo tròn (dùng làm nền cho tem thông tin trên ảnh)
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Đóng dấu thông tin PO / Mã hàng / Color / Wick / Size / Weight trực tiếp vào pixel ảnh
+function stampInfoOnCanvas(ctx, w, h){
+  const r = currentModalRow;
+  if(!r) return;
+
+  const poName = (posCache.find(p => p.PO_Id === r.PO_Id) || {}).PO_Name || r.PO_Id;
+  const size = (r.Diameter != null || r.Height != null)
+    ? `SIZE: Ø${r.Diameter ?? '?'} × H${r.Height ?? '?'}`
+    : null;
+  const weight = (r.Weight != null && r.Weight !== '') ? `Weight: ${r.Weight}g` : null;
+  const colorWick = [r.Color, r.Wick].filter(Boolean).join(' · ') || null;
+
+  const title = '越南ISUN制品有限公司';
+  const lines = [
+    `PO: ${poName}`,
+    `ITEM: ${r.Product_Code ?? '—'}`,
+    colorWick,
+    size,
+    ].filter(Boolean);
+
+  if(!lines.length) return;
+
+  const fontSize = Math.max(17, Math.round(w * 0.024));
+  const titleSize = Math.round(fontSize * 0.82);
+  const lineHeight = Math.round(fontSize * 1.5);
+  const paddingX = Math.round(fontSize * 0.9);
+  const paddingY = Math.round(fontSize * 0.7);
+  const titleGap = Math.round(fontSize * 0.55);
+
+  ctx.textBaseline = 'top';
+
+  ctx.font = `700 ${titleSize}px 'Space Grotesk', Arial, sans-serif`;
+  let maxWidth = ctx.measureText(title).width;
+  ctx.font = `600 ${fontSize}px 'Space Grotesk', Arial, sans-serif`;
+  lines.forEach(l => { maxWidth = Math.max(maxWidth, ctx.measureText(l).width); });
+
+  const boxW = maxWidth + paddingX * 2;
+  const boxH = titleSize + titleGap * 2 + lines.length * lineHeight + paddingY * 2 - (lineHeight - fontSize);
+
+  const margin = fontSize;
+  const boxX = margin;
+  const boxY = h - boxH - margin;
+
+  ctx.fillStyle = 'rgba(29,27,24,0.76)';
+  roundRect(ctx, boxX, boxY, boxW, boxH, 8);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(181,98,44,1)';
+  ctx.fillRect(boxX, boxY, 5, boxH);
+
+  let cursorY = boxY + paddingY;
+  ctx.font = `700 ${titleSize}px 'Space Grotesk', Arial, sans-serif`;
+  ctx.fillStyle = 'rgba(181,98,44,1)';
+  ctx.fillText(title, boxX + paddingX, cursorY);
+  cursorY += titleSize + titleGap;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(boxX + paddingX, cursorY, boxW - paddingX * 2, 1);
+  cursorY += titleGap;
+
+  ctx.font = `600 ${fontSize}px 'Space Grotesk', Arial, sans-serif`;
+  ctx.fillStyle = '#FFFFFF';
+  lines.forEach((line) => {
+    ctx.fillText(line, boxX + paddingX, cursorY);
+    cursorY += lineHeight;
+  });
+}
+
+function openCamera(id, slot){
+  cameraTargetId = id;
+  cameraTargetSlot = slot;
+  const input = document.getElementById('cameraFileInput');
+  input.value = ''; // reset để chọn lại cùng 1 ảnh vẫn kích hoạt sự kiện change
+  input.click();
+}
+
+document.getElementById('cameraFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  await processCapturedPhoto(file);
+});
+
+async function processCapturedPhoto(file){
+  document.getElementById('cameraOverlay').classList.add('show');
+  showCameraLoading();
+
+  try{
+    const img = await loadImageFromFile(file);
+
+    const canvas = document.getElementById('captureCanvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+
+    // Vẽ đúng nguyên ảnh gốc mà camera máy đã chụp — giữ nguyên chiều dọc/ngang lúc chụp,
+    // vì đây là ảnh tĩnh do OS xử lý sẵn, không phải luồng video cần tự đoán góc xoay.
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    stampInfoOnCanvas(ctx, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      lastStampedBlob = blob;
+      showCapturePreview(canvas);
+    }, 'image/jpeg', 0.92);
+  }catch(err){
+    showCameraError('Không đọc được ảnh vừa chụp: ' + err.message);
+  }
+}
+
+function loadImageFromFile(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File ảnh không hợp lệ')); };
+    img.src = url;
+  });
+}
+
+function showCameraLoading(){
+  document.getElementById('cameraLoading').style.display = 'block';
+  document.getElementById('capturePreviewImg').style.display = 'none';
+}
+
+function showCapturePreview(canvas){
+  const previewImg = document.getElementById('capturePreviewImg');
+  previewImg.src = canvas.toDataURL('image/jpeg', 0.92);
+  document.getElementById('cameraLoading').style.display = 'none';
+  previewImg.style.display = 'block';
+}
+
+function showCameraError(message){
+  const viewport = document.getElementById('cameraViewport');
+  viewport.innerHTML = `<div class="camera-error">${message}</div>`;
+}
+
+function closeCamera(){
+  document.getElementById('cameraOverlay').classList.remove('show');
+  lastStampedBlob = null;
+  cameraTargetId = null;
+  cameraTargetSlot = null;
+  // khôi phục viewport nếu trước đó bị thay bằng thông báo lỗi
+  const viewport = document.getElementById('cameraViewport');
+  if(viewport && !viewport.querySelector('#capturePreviewImg')){
+    viewport.innerHTML = `
+      <div class="camera-loading" id="cameraLoading" style="display:none;">Đang xử lý ảnh…</div>
+      <img id="capturePreviewImg" style="display:none;" alt="Ảnh vừa chụp">
+    `;
+  }
+}
+
+document.getElementById('retakeBtn').addEventListener('click', () => {
+  document.getElementById('cameraOverlay').classList.remove('show');
+  lastStampedBlob = null;
+  document.getElementById('cameraFileInput').click();
+});
+
+document.getElementById('useCaptureBtn').addEventListener('click', () => {
+  if(!lastStampedBlob){ alert('Chưa có ảnh để dùng, hãy chụp lại.'); return; }
+  const file = new File([lastStampedBlob], `test-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  const id = cameraTargetId, slot = cameraTargetSlot;
+  closeCamera();
+  uploadImageToSlot(id, slot, file);
+});
+
+
 document.getElementById('imageModal').addEventListener('click', (e) => {
   if(e.target.id === 'imageModal') closeImageModal();
 });
 document.addEventListener('keydown', (e) => {
-  if(e.key === 'Escape'){ closeLightbox(); closeImageModal(); }
+  if(e.key === 'Escape'){ closeCamera(); closeLightbox(); closeImageModal(); }
 });
 
 // Chặn trình duyệt tự mở ảnh nếu người dùng lỡ thả ra ngoài khung ảnh
@@ -1060,11 +1349,9 @@ async function editRow(id){
     document.getElementById('test_date').value = r.Test_date ?? (r.Start ? r.Start.slice(0,10) : todayISO());
     document.getElementById('tester').value = r.Tester ?? '';
     document.getElementById('approved').value = r.Approved ?? '';
-
     document.getElementById('res_pass').checked = r.Test_result === 'PASS';
     document.getElementById('res_fail').checked = r.Test_result === 'FAIL';
-    document.getElementById('res_pending').checked = !r.Test_result;
-
+    document.getElementById('res_pending').checked = (r.Test_result === 'PENDING') || !r.Test_result;
     enterEditMode(r.Id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }catch(err){
@@ -1137,7 +1424,7 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     time: (document.getElementById('start_datetime').value || '').slice(11,16) || null,
     tester: document.getElementById('tester').value || null,
     approved: document.getElementById('approved').value || null,
-    test_result: (resultEl && resultEl.value) ? resultEl.value : null,
+    test_result: resultEl ? resultEl.value : 'PENDING',
   };
 
   if(!payload.po_id){ showMsg(msg, 'Vui lòng chọn PO trước khi lưu', true); return; }
@@ -1367,7 +1654,7 @@ async function importOneRow(row){
     time: null,
     tester: null,
     approved: null,
-    test_result: null
+    test_result: 'PENDING'
   };
 
   const res = await fetch(`${API}/po-details`, {

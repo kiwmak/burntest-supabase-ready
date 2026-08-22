@@ -622,6 +622,7 @@
         </div>
       </div>
       <div class="filters">
+        <select id="filterCustomer"><option value="">Tất cả khách hàng</option></select>
         <select id="filterPo"><option value="">Tất cả PO</option></select>
         <select id="filterResult">
           <option value="">Tất cả kết quả</option>
@@ -637,6 +638,7 @@
             <tr>
               <th>Mã SP</th>
               <th>PO</th>
+              <th>Khách hàng</th>
               <th>Ø / Cao</th>
               <th>Nhiệt độ</th>
               <th>Start / End</th>
@@ -647,7 +649,7 @@
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr><td colspan="15" class="empty-state">Đang tải dữ liệu…</td></tr>
+            <tr><td colspan="16" class="empty-state">Đang tải dữ liệu…</td></tr>
           </tbody>
         </table>
       </div>
@@ -814,12 +816,17 @@ async function loadClientsAndPos(){
   const clientMap = Object.fromEntries(clients.map(c => [c.Cus_id, c.Cus_Name]));
 
   const poSelect = document.getElementById('po_id');
+  const filterCustomer = document.getElementById('filterCustomer');
   const filterPo = document.getElementById('filterPo');
   const newPoClient = document.getElementById('new_po_client');
 
   poSelect.innerHTML = pos.map(p =>
     `<option value="${p.PO_Id}">${p.PO_Name} — ${clientMap[p.Cus_id] || '?'}</option>`
   ).join('') || '<option value="">Chưa có PO nào</option>';
+
+  filterCustomer.innerHTML = '<option value="">Tất cả khách hàng</option>' + clients.map(c =>
+    `<option value="${c.Cus_id}">${c.Cus_Name}</option>`
+  ).join('');
 
   filterPo.innerHTML = '<option value="">Tất cả PO</option>' + pos.map(p =>
     `<option value="${p.PO_Id}">${p.PO_Name}</option>`
@@ -836,6 +843,7 @@ let currentPage = 1;
 let lastLoadedRows = [];
 
 async function loadTable(resetPage = true){
+  const cus_id = document.getElementById('filterCustomer').value;
   const po_id = document.getElementById('filterPo').value;
   const test_result = document.getElementById('filterResult').value;
   const product_code = document.getElementById('filterProduct').value;
@@ -845,7 +853,14 @@ async function loadTable(resetPage = true){
   if(test_result) params.set('test_result', test_result);
   if(product_code) params.set('product_code', product_code);
 
-  const rows = await fetch(`${API}/po-details?${params}`).then(r => r.json());
+  let rows = await fetch(`${API}/po-details?${params}`).then(r => r.json());
+
+  // Lọc theo khách hàng ngay tại trình duyệt (suy ra từ PO_Id -> Cus_id, vì API chưa hỗ trợ lọc thẳng theo khách hàng)
+  if(cus_id){
+    const poCustMap = Object.fromEntries(posCache.map(p => [p.PO_Id, p.Cus_id]));
+    rows = rows.filter(r => String(poCustMap[r.PO_Id]) === String(cus_id));
+  }
+
   lastLoadedRows = rows;
   rowsCache = Object.fromEntries(rows.map(r => [r.Id, r]));
 
@@ -863,6 +878,8 @@ async function loadTable(resetPage = true){
 function renderPage(){
   const rows = lastLoadedRows;
   const poMap = Object.fromEntries(posCache.map(p => [p.PO_Id, p.PO_Name]));
+  const custNameMap = Object.fromEntries(clientsCache.map(c => [c.Cus_id, c.Cus_Name]));
+  const poCustMap = Object.fromEntries(posCache.map(p => [p.PO_Id, p.Cus_id]));
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   if(currentPage > totalPages) currentPage = totalPages;
   if(currentPage < 1) currentPage = 1;
@@ -872,12 +889,13 @@ function renderPage(){
 
   const tbody = document.getElementById('tableBody');
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Chưa có bản ghi test nào</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Chưa có bản ghi test nào</td></tr>';
   } else {
     tbody.innerHTML = pageRows.map(r => `
       <tr id="row-${r.Id}" class="${Number(currentEditId) === r.Id ? 'editing-row' : ''}">
         <td class="mono"><a href="#" class="product-link" onclick="openImageModal(${r.Id}); return false;">${r.Product_Code}</a></td>
         <td>${poMap[r.PO_Id] || r.PO_Id}</td>
+        <td>${custNameMap[poCustMap[r.PO_Id]] ?? '—'}</td>
         <td class="mono">${r.Diameter ?? '—'} / ${r.Height ?? '—'}</td>
         <td class="mono">${r.Temperature ?? '—'}°C</td>
         <td class="mono">${formatDateTime(r.Start)}<br><span style="color:var(--ink-soft)">${formatDateTime(r.End)}</span></td>
@@ -917,6 +935,54 @@ function renderPics(r){
   </label>`;
 }
 
+const MAX_UPLOAD_WIDTH = 1280;
+const MAX_UPLOAD_HEIGHT = 960;
+
+async function compressImageForUpload(file){
+  // Resize ảnh về tối đa 1280x960 (giữ tỉ lệ, không phóng to ảnh nhỏ hơn)
+  // rồi nén JPEG quality 0.85 để giảm dung lượng trước khi upload.
+  // GIF được giữ nguyên (có thể là ảnh động, canvas chỉ lấy được frame đầu).
+  if(!file || /^image\/gif$/i.test(file.type)) return file;
+  if(!/^image\//i.test(file.type)) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const srcW = img.naturalWidth;
+        const srcH = img.naturalHeight;
+        const scale = Math.min(1, MAX_UPLOAD_WIDTH / srcW, MAX_UPLOAD_HEIGHT / srcH);
+        const outW = Math.max(1, Math.round(srcW * scale));
+        const outH = Math.max(1, Math.round(srcH * scale));
+
+        // Nếu ảnh đã nhỏ hơn/bằng kích thước tối đa và dung lượng đã nhỏ, giữ nguyên.
+        if(scale >= 1 && file.size < 1024 * 1024){
+          URL.revokeObjectURL(url);
+          resolve(file);
+          return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.drawImage(img, 0, 0, outW, outH);
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          if(!blob || blob.size >= file.size){ resolve(file); return; }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type:'image/jpeg', lastModified:file.lastModified }));
+        }, 'image/jpeg', 0.85);
+      } catch (_) {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 async function uploadImage(id, input){
   const file = input.files[0];
   if(!file) return;
@@ -926,7 +992,8 @@ async function uploadImage(id, input){
   if(!match){ alert('Vị trí ảnh không hợp lệ. Hãy nhập PIC_1 đến PIC_5.'); return; }
   const fd = new FormData();
   fd.append('pic_slot', match[1]);
-  fd.append('file', file);
+  const optimizedFile = await compressImageForUpload(file);
+  fd.append('file', optimizedFile);
   const res = await fetch(`${API}/po-details/${id}/images`, { method:'POST', body: fd });
   if(res.ok){ loadTable(false); } else { alert('Lỗi upload ảnh'); }
 }
@@ -1040,7 +1107,8 @@ async function uploadImageToSlot(id, slot, file, frameEl){
     return;
   }
   fd.append('pic_slot', slotNumber);
-  fd.append('file', file);
+  const optimizedFile = await compressImageForUpload(file);
+  fd.append('file', optimizedFile);
   try{
     const res = await fetch(`${API}/po-details/${id}/images`, { method:'POST', body: fd });
     if(!res.ok){
@@ -1668,6 +1736,16 @@ document.getElementById('doImportBtn').addEventListener('click', async () => {
 
 // ---------- Filters & refresh ----------
 document.getElementById('refreshBtn').addEventListener('click', loadTable);
+document.getElementById('filterCustomer').addEventListener('change', () => {
+  // Khi chọn khách hàng, thu hẹp dropdown PO chỉ còn PO của khách hàng đó cho dễ chọn
+  const cus_id = document.getElementById('filterCustomer').value;
+  const filterPo = document.getElementById('filterPo');
+  const filteredPos = cus_id ? posCache.filter(p => String(p.Cus_id) === String(cus_id)) : posCache;
+  filterPo.innerHTML = '<option value="">Tất cả PO</option>' + filteredPos.map(p =>
+    `<option value="${p.PO_Id}">${p.PO_Name}</option>`
+  ).join('');
+  loadTable();
+});
 document.getElementById('filterPo').addEventListener('change', loadTable);
 document.getElementById('filterResult').addEventListener('change', loadTable);
 document.getElementById('filterProduct').addEventListener('input', () => {
