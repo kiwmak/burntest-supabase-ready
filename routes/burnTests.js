@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { supabase, SUPABASE_STORAGE_BUCKET } = require('../database/database');
+const { generateBurnTestReportPdf } = require('../lib/pdfReport');
 
 const router = express.Router();
 
@@ -94,6 +95,14 @@ async function fetchPhotos(testId) {
   return data || [];
 }
 
+async function fetchLogs(testId) {
+  const { data, error } = await supabase.from('burn_test_logs')
+    .select('id,burn_test_id,time_label,wick_status,flame_status,wick_height_mm,vessel_condition,temperature_c,note,created_at')
+    .eq('burn_test_id', testId).order('created_at').order('id');
+  if (error) throw error;
+  return data || [];
+}
+
 async function getTest(id) {
   const { data, error } = await supabase.from('burn_tests')
     .select('id,purchase_order_id,product_code,diameter_mm,height_mm,fragrance,color,wick,temperature_c,test_date,test_time,start_datetime,end_datetime,total_burn_time,tester,approver,result,note,created_at,updated_at,purchase_order:purchase_orders!inner(id,po_number,customer:customers!inner(id,name))')
@@ -101,7 +110,10 @@ async function getTest(id) {
   if (error) throw error;
   if (!data) return null;
   const photos = await fetchPhotos(id);
-  return withLegacyFields(data, photos);
+  const logs = await fetchLogs(id);
+  const row = withLegacyFields(data, photos);
+  row.logs = logs;
+  return row;
 }
 
 async function listTests(query) {
@@ -167,6 +179,18 @@ router.get('/:id', async (req, res, next) => {
     const row = await getTest(req.params.id);
     if (!row) return res.status(404).json({ error: 'Không tìm thấy bản ghi test' });
     res.json(row);
+  } catch (err) { next(err); }
+});
+
+router.get('/:id/report.pdf', async (req, res, next) => {
+  try {
+    const test = await getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: 'Không tìm thấy bản ghi test' });
+
+    const safeCode = String(test.Product_Code || test.Id).replace(/[^a-zA-Z0-9._-]+/g, '-');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="bao-cao-test-dot-${safeCode}.pdf"`);
+    await generateBurnTestReportPdf(res, test);
   } catch (err) { next(err); }
 });
 
@@ -413,6 +437,100 @@ router.delete('/:id/photos/:slot', async (req, res, next) => {
       if (se) console.warn('Không xóa được ảnh khỏi Storage:', se.message);
     }
     await supabase.from('burn_tests').update({ updated_at: new Date().toISOString() }).eq('id', req.params.id);
+    res.status(204).send();
+  } catch (err) { next(err); }
+});
+
+// ---------- Log kiểm tra định kỳ (VD: mỗi 2 giờ ghi 1 lần trong lúc đốt) ----------
+function validateLogPayload(body, partial = false) {
+  const payload = {
+    time_label: body.time_label !== undefined ? String(body.time_label ?? '').trim() : undefined,
+    wick_status: body.wick_status !== undefined ? String(body.wick_status ?? '').trim() : undefined,
+    flame_status: body.flame_status !== undefined ? String(body.flame_status ?? '').trim() : undefined,
+    wick_height_mm: body.wick_height_mm !== undefined ? body.wick_height_mm : undefined,
+    vessel_condition: body.vessel_condition !== undefined ? String(body.vessel_condition ?? '').trim() : undefined,
+    temperature_c: body.temperature_c !== undefined ? body.temperature_c : undefined,
+    note: body.note !== undefined ? (body.note === '' ? null : String(body.note)) : undefined
+  };
+
+  if (!partial) {
+    if (!payload.time_label) throw new Error('time_label (thời gian, VD: 2H) là bắt buộc');
+    if (!payload.wick_status) throw new Error('wick_status (trạng thái bấc) là bắt buộc');
+    if (!payload.flame_status) throw new Error('flame_status (trạng thái ngọn lửa) là bắt buộc');
+    if (!payload.vessel_condition) throw new Error('vessel_condition (tình trạng bể đốt) là bắt buộc');
+    if (payload.wick_height_mm === undefined || payload.wick_height_mm === null || payload.wick_height_mm === '') {
+      throw new Error('wick_height_mm (chiều cao bấc) là bắt buộc');
+    }
+    if (payload.temperature_c === undefined || payload.temperature_c === null || payload.temperature_c === '') {
+      throw new Error('temperature_c (nhiệt độ) là bắt buộc');
+    }
+  }
+  for (const [name, value] of [['wick_height_mm', payload.wick_height_mm], ['temperature_c', payload.temperature_c]]) {
+    if (value !== undefined && value !== null && value !== '' && !Number.isFinite(Number(value))) {
+      throw new Error(`${name} phải là số`);
+    }
+  }
+
+  // Bỏ các field undefined để dùng chung được cho cả create (đủ field) và update (partial).
+  Object.keys(payload).forEach(k => { if (payload[k] === undefined) delete payload[k]; });
+  if (payload.wick_height_mm !== undefined) payload.wick_height_mm = payload.wick_height_mm === '' ? null : Number(payload.wick_height_mm);
+  if (payload.temperature_c !== undefined) payload.temperature_c = payload.temperature_c === '' ? null : Number(payload.temperature_c);
+  return payload;
+}
+
+router.get('/:id/logs', async (req, res, next) => {
+  try {
+    const { data: test, error: te } = await supabase.from('burn_tests').select('id').eq('id', req.params.id).maybeSingle();
+    if (te) throw te;
+    if (!test) return res.status(404).json({ error: 'Không tìm thấy bản ghi test' });
+    res.json(await fetchLogs(req.params.id));
+  } catch (err) { next(err); }
+});
+
+router.post('/:id/logs', async (req, res, next) => {
+  try {
+    const { data: test, error: te } = await supabase.from('burn_tests').select('id').eq('id', req.params.id).maybeSingle();
+    if (te) throw te;
+    if (!test) return res.status(404).json({ error: 'Không tìm thấy bản ghi test' });
+
+    const p = validateLogPayload(req.body, false);
+    const { data, error } = await supabase.from('burn_test_logs').insert({
+      burn_test_id: Number(req.params.id),
+      time_label: p.time_label,
+      wick_status: p.wick_status,
+      flame_status: p.flame_status,
+      wick_height_mm: p.wick_height_mm,
+      vessel_condition: p.vessel_condition,
+      temperature_c: p.temperature_c,
+      note: p.note ?? null
+    }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.put('/:id/logs/:logId', async (req, res, next) => {
+  try {
+    const { data: existing, error: ee } = await supabase.from('burn_test_logs')
+      .select('id').eq('id', req.params.logId).eq('burn_test_id', req.params.id).maybeSingle();
+    if (ee) throw ee;
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy log' });
+
+    const p = validateLogPayload(req.body, true);
+    if (Object.keys(p).length === 0) return res.status(400).json({ error: 'Không có dữ liệu để cập nhật' });
+
+    const { data, error } = await supabase.from('burn_test_logs')
+      .update(p).eq('id', req.params.logId).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:id/logs/:logId', async (req, res, next) => {
+  try {
+    const { error } = await supabase.from('burn_test_logs')
+      .delete().eq('id', req.params.logId).eq('burn_test_id', req.params.id);
+    if (error) throw error;
     res.status(204).send();
   } catch (err) { next(err); }
 });

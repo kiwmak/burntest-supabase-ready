@@ -32,6 +32,22 @@ Trong Supabase Dashboard:
 
 Schema tạo 4 bảng và bucket Storage `burn-test-photos`.
 
+### Log kiểm tra định kỳ (mới)
+
+Nếu bạn đã tạo DB từ trước và muốn thêm tính năng ghi log kiểm tra mỗi 2 giờ,
+chạy thêm file `database/burn_test_logs.sql` trong SQL Editor (chỉ cần chạy 1 lần,
+dùng `CREATE TABLE IF NOT EXISTS` nên chạy lại không lỗi).
+
+### Xuất báo cáo PDF (mới)
+
+Nút "⬇ Xuất PDF" trong modal chi tiết test sẽ tải file PDF gồm: thông tin test,
+bảng log kiểm tra định kỳ, và toàn bộ ảnh minh chứng — dùng để gửi cho khách hàng.
+
+- Cần cài `pdfkit` (đã có trong `package.json`, chỉ cần `npm install`).
+- Font `assets/fonts/DejaVuSans.ttf` (+ bản Bold) được bundle sẵn trong project để
+  đảm bảo hiển thị đúng tiếng Việt có dấu, không phụ thuộc font cài sẵn trên server.
+  **Không xóa thư mục `assets/` khi deploy.**
+
 > Backend dùng `SUPABASE_SERVICE_ROLE_KEY`. Key này chỉ được đặt ở server/.env, tuyệt đối không đưa vào `public/*.html`.
 
 ## 2. Cấu hình biến môi trường
@@ -100,6 +116,9 @@ GET/PUT/DELETE /api/v1/burn-tests/:id
 POST       /api/v1/burn-tests/:id/photos
 DELETE     /api/v1/burn-tests/:id/photos/:slot
 GET        /api/v1/burn-tests/summary
+GET/POST   /api/v1/burn-tests/:id/logs
+PUT/DELETE /api/v1/burn-tests/:id/logs/:logId
+GET        /api/v1/burn-tests/:id/report.pdf
 ```
 
 API alias cũ vẫn hoạt động:
