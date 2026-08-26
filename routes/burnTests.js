@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const { supabase, SUPABASE_STORAGE_BUCKET } = require('../database/database');
 const { generateBurnTestReportPdf } = require('../lib/pdfReport');
+const { generateBurnTestReportXlsx } = require('../lib/xlsxReport');
 
 const router = express.Router();
 
@@ -191,6 +192,18 @@ router.get('/:id/report.pdf', async (req, res, next) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="bao-cao-test-dot-${safeCode}.pdf"`);
     await generateBurnTestReportPdf(res, test);
+  } catch (err) { next(err); }
+});
+
+router.get('/:id/report.xlsx', async (req, res, next) => {
+  try {
+    const test = await getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: 'Không tìm thấy bản ghi test' });
+
+    const safeCode = String(test.Product_Code || test.Id).replace(/[^a-zA-Z0-9._-]+/g, '-');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="bao-cao-test-dot-${safeCode}.xlsx"`);
+    await generateBurnTestReportXlsx(res, test);
   } catch (err) { next(err); }
 });
 

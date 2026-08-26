@@ -41,12 +41,23 @@ dùng `CREATE TABLE IF NOT EXISTS` nên chạy lại không lỗi).
 ### Xuất báo cáo PDF (mới)
 
 Nút "⬇ Xuất PDF" trong modal chi tiết test sẽ tải file PDF gồm: thông tin test,
-bảng log kiểm tra định kỳ, và toàn bộ ảnh minh chứng — dùng để gửi cho khách hàng.
+bảng log kiểm tra định kỳ, biểu đồ nhiệt độ theo thời gian, và toàn bộ ảnh minh
+chứng — dùng để gửi cho khách hàng.
 
 - Cần cài `pdfkit` (đã có trong `package.json`, chỉ cần `npm install`).
 - Font `assets/fonts/DejaVuSans.ttf` (+ bản Bold) được bundle sẵn trong project để
   đảm bảo hiển thị đúng tiếng Việt có dấu, không phụ thuộc font cài sẵn trên server.
   **Không xóa thư mục `assets/` khi deploy.**
+
+### Xuất báo cáo Excel (mới)
+
+Nút "⬇ Xuất Excel" cạnh nút Xuất PDF tải file `.xlsx` gồm 2 sheet:
+- **Thông tin & Log**: thông tin test + bảng log kiểm tra định kỳ + 3 dòng tổng hợp
+  dùng công thức Excel thật (`AVERAGE`, `MAX`, trừ trực tiếp 2 ô) — nếu khách hàng
+  sửa số liệu trong log, các dòng tổng hợp này tự tính lại.
+- **Ảnh minh chứng**: toàn bộ ảnh test được nhúng trực tiếp vào file Excel.
+
+Cần cài `exceljs` (đã có trong `package.json`, chỉ cần `npm install`).
 
 > Backend dùng `SUPABASE_SERVICE_ROLE_KEY`. Key này chỉ được đặt ở server/.env, tuyệt đối không đưa vào `public/*.html`.
 
@@ -119,6 +130,7 @@ GET        /api/v1/burn-tests/summary
 GET/POST   /api/v1/burn-tests/:id/logs
 PUT/DELETE /api/v1/burn-tests/:id/logs/:logId
 GET        /api/v1/burn-tests/:id/report.pdf
+GET        /api/v1/burn-tests/:id/report.xlsx
 ```
 
 API alias cũ vẫn hoạt động:

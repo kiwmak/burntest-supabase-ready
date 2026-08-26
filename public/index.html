@@ -669,10 +669,9 @@
               <th>Mã SP</th>
               <th>PO</th>
               <th>Khách hàng</th>
-              <th>Ø / Cao</th>
-              <th>Nhiệt độ</th>
+             
               <th>Start / End</th>
-              <th>Tester</th>
+             
               <th>Kết quả</th>
               <th>Ảnh</th>
               <th>Thao tác</th>
@@ -764,6 +763,7 @@ CBE	YN26-0151	22488P	70	80	123	WHITE	T27"></textarea>
       </div>
       <div style="display:flex; align-items:flex-start; gap:8px;">
         <button type="button" class="btn btn-ghost" id="exportPdfBtn" onclick="exportBurnTestPdf()">⬇ Xuất PDF</button>
+        <button type="button" class="btn btn-ghost" id="exportXlsxBtn" onclick="exportBurnTestXlsx()">⬇ Xuất Excel</button>
         <button class="modal-close" onclick="closeImageModal()">✕</button>
       </div>
     </div>
@@ -979,10 +979,9 @@ function renderPage(){
         <td class="mono"><a href="#" class="product-link" onclick="openImageModal(${r.Id}); return false;">${r.Product_Code}</a></td>
         <td>${poMap[r.PO_Id] || r.PO_Id}</td>
         <td>${custNameMap[poCustMap[r.PO_Id]] ?? '—'}</td>
-        <td class="mono">${r.Diameter ?? '—'} / ${r.Height ?? '—'}</td>
-        <td class="mono">${r.Temperature ?? '—'}°C</td>
+        
         <td class="mono">${formatDateTime(r.Start)}<br><span style="color:var(--ink-soft)">${formatDateTime(r.End)}</span></td>
-        <td>${r.Tester ?? '—'}</td>
+        
         <td>${stampHtml(r.Test_result)}</td>
         <td>${renderPics(r)}</td>
         <td>
@@ -1148,6 +1147,16 @@ function exportBurnTestPdf(){
   btn.textContent = 'Đang xuất...';
   // Mở trực tiếp URL để trình duyệt tải file PDF (server stream file, không cần chờ fetch).
   window.location.href = `${API}/burn-tests/${currentModalRow.Id}/report.pdf`;
+  setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 1500);
+}
+
+function exportBurnTestXlsx(){
+  if(!currentModalRow) return;
+  const btn = document.getElementById('exportXlsxBtn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Đang xuất...';
+  window.location.href = `${API}/burn-tests/${currentModalRow.Id}/report.xlsx`;
   setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 1500);
 }
 
