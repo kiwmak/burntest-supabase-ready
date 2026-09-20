@@ -7,6 +7,7 @@ require('./database/database');
 
 const clientsRouter = require('./routes/clients');
 const posRouter = require('./routes/pos');
+const productsRouter = require('./routes/products');
 const burnTestsRouter = require('./routes/burnTests');
 
 const app = express();
@@ -24,6 +25,7 @@ app.get('/api', (_req, res) => res.json({
   storage: process.env.SUPABASE_STORAGE_BUCKET || 'burn-test-photos',
   endpoints: {
     customers: '/api/v1/clients',
+    products: '/api/v1/products',
     purchase_orders: '/api/v1/pos',
     burn_tests: '/api/v1/burn-tests',
     summary: '/api/v1/burn-tests/summary',
@@ -32,6 +34,7 @@ app.get('/api', (_req, res) => res.json({
 }));
 
 app.use('/api/v1/clients', clientsRouter);
+app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/pos', posRouter);
 app.use('/api/v1/burn-tests', burnTestsRouter);
 app.use('/api/v1/po-details', burnTestsRouter);
