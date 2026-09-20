@@ -80,6 +80,38 @@
   }
   .stat small{ font-size:10.5px; color:#A69B8B; text-transform:uppercase; letter-spacing:0.5px; }
 
+  /* ---- Navigation Tabs ---- */
+  .nav-tabs{
+    background: var(--charcoal-2);
+    border-bottom: 2px solid var(--line);
+    padding: 0 32px;
+    display:flex; gap:0;
+  }
+  .nav-tab{
+    padding: 14px 24px;
+    background: transparent;
+    border: none;
+    color: #A69B8B;
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:14px;
+    cursor:pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all .12s ease;
+  }
+  .nav-tab:hover{
+    color: var(--paper);
+    background: rgba(181,98,44,0.08);
+  }
+  .nav-tab.active{
+    color: var(--paper);
+    border-bottom-color: var(--copper);
+    background: var(--charcoal);
+  }
+  .tab-content{ display:none; }
+  .tab-content.active{ display:block; }
+
   main{ max-width: 1180px; width:100%; margin: 0 auto; padding: 32px; }
 
   .layout{
@@ -505,7 +537,15 @@
   </div>
 </header>
 
+<!-- ============ NAVIGATION TABS ============ -->
+<div class="nav-tabs">
+  <button class="nav-tab active" data-tab="qc-test">📝 QC Test</button>
+  <button class="nav-tab" data-tab="customers">👥 Khách hàng</button>
+  <button class="nav-tab" data-tab="products">📦 Sản phẩm</button>
+</div>
+
 <main>
+  <!-- ============ TAB: QC TEST ============ -->
   <div class="layout">
 
     <!-- ============ FORM NHẬP LIỆU ============ -->
@@ -737,6 +777,73 @@
     </div>
 
   </div>
+  </div>
+</div>
+
+<!-- ============ TAB: CUSTOMERS ============ -->
+<div id="tab-customers" class="tab-content">
+  <div class="card">
+    <div class="card-head">
+      <h2>Quản lý khách hàng</h2>
+      <button type="button" class="btn btn-ghost" id="refreshCustomersBtn" style="width:auto; padding:7px 14px; font-size:12.5px; margin:0;">↻ Làm mới</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tên khách hàng</th>
+            <th>Ngày tạo</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="customersTableBody">
+          <tr><td colspan="4" class="empty-state">Đang tải dữ liệu…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="list-foot">
+      <span id="customersCountLabel">0 khách hàng</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TAB: PRODUCTS ============ -->
+<div id="tab-products" class="tab-content">
+  <div class="card">
+    <div class="card-head">
+      <h2>Quản lý sản phẩm</h2>
+      <button type="button" class="btn btn-ghost" id="refreshProductsBtn" style="width:auto; padding:7px 14px; font-size:12.5px; margin:0;">↻ Làm mới</button>
+    </div>
+    <div class="filters">
+      <input type="text" id="filterProductCode" placeholder="Tìm mã sản phẩm...">
+      <input type="text" id="filterProductName" placeholder="Tìm tên sản phẩm...">
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã SP</th>
+            <th>Tên sản phẩm</th>
+            <th>Đường kính (mm)</th>
+            <th>Chiều cao (mm)</th>
+            <th>Mùi hương</th>
+            <th>Màu sắc</th>
+            <th>Tim (Wick)</th>
+            <th>Cập nhật</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="productsTableBody">
+          <tr><td colspan="9" class="empty-state">Đang tải dữ liệu…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="list-foot">
+      <span id="productsCountLabel">0 sản phẩm</span>
+    </div>
+  </div>
+</div>
 </main>
 
 <footer>Burn Test Tracking API · dữ liệu lưu tại SQLite nội bộ</footer>
@@ -2098,6 +2205,163 @@ document.getElementById('filterProduct').addEventListener('input', () => {
   await loadClientsAndPos();
   await loadTable();
 })();
+
+// ========== TAB NAVIGATION HANDLERS ==========
+const navTabs = document.querySelectorAll('.nav-tab');
+const tabContents = document.querySelectorAll('.tab-content');
+
+navTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const targetTab = tab.dataset.tab;
+    
+    // Update active tab button
+    navTabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    
+    // Update active content
+    tabContents.forEach(content => {
+      content.classList.remove('active');
+      if (content.id === `tab-${targetTab}`) {
+        content.classList.add('active');
+      }
+    });
+    
+    // Load data for specific tabs
+    if (targetTab === 'customers') {
+      loadCustomersTable();
+    } else if (targetTab === 'products') {
+      loadProductsTable();
+    }
+  });
+});
+
+// ========== CUSTOMERS MANAGEMENT ==========
+async function loadCustomersTable(){
+  try {
+    const customers = await fetch(`${API}/clients`).then(r => r.json());
+    const tbody = document.getElementById('customersTableBody');
+    
+    if (!customers || customers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Chưa có khách hàng nào</td></tr>';
+    } else {
+      tbody.innerHTML = customers.map(c => `
+        <tr>
+          <td class="mono">${c.Cus_id}</td>
+          <td>${c.Cus_Name}</td>
+          <td class="mono">${formatDateTime(c.created_at)}</td>
+          <td>
+            <div class="row-actions">
+              <button type="button" class="icon-btn danger" title="Xóa" onclick="deleteCustomer(${c.Cus_id})">🗑</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+    
+    document.getElementById('customersCountLabel').textContent = `${customers.length} khách hàng`;
+  } catch (err) {
+    console.error('Error loading customers:', err);
+  }
+}
+
+async function deleteCustomer(cus_id){
+  if (!confirm('Bạn có chắc chắn muốn xóa khách hàng này?')) return;
+  
+  try {
+    const res = await fetch(`${API}/clients/${cus_id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error || 'Không thể xóa khách hàng');
+      return;
+    }
+    await loadCustomersTable();
+    await loadClientsAndPos(); // Refresh cache
+  } catch (err) {
+    console.error('Error deleting customer:', err);
+    alert('Có lỗi xảy ra khi xóa khách hàng');
+  }
+}
+
+document.getElementById('refreshCustomersBtn').addEventListener('click', loadCustomersTable);
+
+// ========== PRODUCTS MANAGEMENT ==========
+async function loadProductsTable(){
+  try {
+    let products = await fetch(`${API}/products`).then(r => r.json());
+    
+    // Apply filters
+    const codeFilter = document.getElementById('filterProductCode').value.trim().toLowerCase();
+    const nameFilter = document.getElementById('filterProductName').value.trim().toLowerCase();
+    
+    if (codeFilter) {
+      products = products.filter(p => p.product_code && p.product_code.toLowerCase().includes(codeFilter));
+    }
+    if (nameFilter) {
+      products = products.filter(p => p.name && p.name.toLowerCase().includes(nameFilter));
+    }
+    
+    const tbody = document.getElementById('productsTableBody');
+    
+    if (!products || products.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Không tìm thấy sản phẩm nào</td></tr>';
+    } else {
+      tbody.innerHTML = products.map(p => `
+        <tr>
+          <td class="mono"><a href="#" class="product-link" onclick="viewProduct(${p.id}); return false;">${p.product_code || '—'}</a></td>
+          <td>${p.name || '—'}</td>
+          <td class="mono">${p.diameter_mm || '—'}</td>
+          <td class="mono">${p.height_mm || '—'}</td>
+          <td>${p.fragrance || '—'}</td>
+          <td>${p.color || '—'}</td>
+          <td>${p.wick || '—'}</td>
+          <td class="mono">${formatDateTime(p.updated_at)}</td>
+          <td>
+            <div class="row-actions">
+              <button type="button" class="icon-btn" title="Sửa" onclick="editProduct(${p.id})">✎</button>
+              <button type="button" class="icon-btn danger" title="Xóa" onclick="deleteProduct(${p.id})">🗑</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+    
+    document.getElementById('productsCountLabel').textContent = `${products.length} sản phẩm`;
+  } catch (err) {
+    console.error('Error loading products:', err);
+  }
+}
+
+document.getElementById('filterProductCode').addEventListener('input', loadProductsTable);
+document.getElementById('filterProductName').addEventListener('input', loadProductsTable);
+document.getElementById('refreshProductsBtn').addEventListener('click', loadProductsTable);
+
+async function deleteProduct(product_id){
+  if (!confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) return;
+  
+  try {
+    const res = await fetch(`${API}/products/${product_id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error || 'Không thể xóa sản phẩm');
+      return;
+    }
+    await loadProductsTable();
+    await loadClientsAndPos(); // Refresh cache
+  } catch (err) {
+    console.error('Error deleting product:', err);
+    alert('Có lỗi xảy ra khi xóa sản phẩm');
+  }
+}
+
+async function editProduct(product_id){
+  // For now, just show an alert - can be enhanced with inline editing or modal
+  alert('Tính năng sửa sản phẩm sẽ được cập nhật sau. ID: ' + product_id);
+}
+
+async function viewProduct(product_id){
+  // For now, just show an alert - can be enhanced with detail modal
+  alert('Xem chi tiết sản phẩm ID: ' + product_id);
+}
 </script>
 
 </body>
